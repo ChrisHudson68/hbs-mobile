@@ -1,1159 +1,1172 @@
 import * as SecureStore from 'expo-secure-store';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  Pressable,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 
-type Job = {
-  id: number;
-  jobName?: string;
-  jobCode?: string | null;
-  clientName?: string | null;
-  status?: string | null;
+const CONFIG = {
+  API_BASE_URL: 'https://hudson-business-solutions.com',
 };
-
-type JobDetail = {
-  id: number;
-  jobName?: string;
-  jobCode?: string | null;
-  jobDescription?: string | null;
-  clientName?: string | null;
-  soldBy?: string | null;
-  commissionPercent?: number | null;
-  contractAmount?: number | null;
-  retainagePercent?: number | null;
-  startDate?: string | null;
-  status?: string | null;
-  sourceEstimateId?: number | null;
-  sourceEstimateNumber?: string | null;
-  sourceEstimateCustomerName?: string | null;
-  financials?: {
-    totalIncome?: number;
-    totalExpenses?: number;
-    totalLabor?: number;
-    totalHours?: number;
-    totalCosts?: number;
-    totalInvoiced?: number;
-    totalCollected?: number;
-    unpaidInvoices?: number;
-    unpaidInvoiceBalance?: number;
-    remainingContract?: number;
-    profit?: number;
-  };
-};
-
-type TimesheetEntry = {
-  id: number;
-  employeeId?: number;
-  employeeName?: string | null;
-  date?: string | null;
-  jobId?: number | null;
-  jobName?: string | null;
-  hours?: number | null;
-  note?: string | null;
-  clockInAt?: string | null;
-  clockOutAt?: string | null;
-  entryMethod?: string | null;
-  approvalStatus?: string | null;
-  hasPendingEditRequest?: boolean;
-};
-
-type ActiveClockEntry = {
-  id: number;
-  jobId?: number | null;
-  jobName?: string | null;
-  clockInAt?: string | null;
-};
-
-type TimesheetSummary = {
-  entryCount?: number;
-  totalHours?: number;
-  weekApproved?: boolean;
-  approvedAt?: string | null;
-  approvedByName?: string | null;
-};
-
-type TimesheetScope = {
-  employeeId?: number;
-  start?: string;
-  end?: string;
-  isEmployeeUser?: boolean;
-  canApproveTime?: boolean;
-  canUseSelfClock?: boolean;
-};
-
-type TimesheetResponse = {
-  scope?: TimesheetScope;
-  summary?: TimesheetSummary;
-  activeClockEntry?: ActiveClockEntry | null;
-  timesheets: TimesheetEntry[];
-};
-
-type AppTab = 'jobs' | 'timesheets';
-
-const API_BASE_URL = 'http://192.168.1.181:3000';
 
 const STORAGE_KEYS = {
   tenant: 'hbs_mobile_tenant',
   token: 'hbs_mobile_token',
+  user: 'hbs_mobile_user',
+} as const;
+
+type User = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  permissions: string[];
 };
 
-function formatMoney(value: number | null | undefined): string {
-  const amount = Number(value ?? 0);
-  return `$${amount.toFixed(2)}`;
+type Tenant = {
+  id: number;
+  name: string;
+  subdomain: string;
+  logoPath: string | null;
+};
+
+type LoginResponse = {
+  ok: true;
+  token: string;
+  expiresAt: string;
+  user: User;
+  tenant: Tenant;
+};
+
+type JobListItem = {
+  id: number;
+  jobName: string;
+  customerName: string | null;
+  status: string | null;
+  description: string | null;
+  sourceEstimateId?: number | null;
+  sourceEstimateCustomerName?: string | null;
+  financials?: {
+    totalIncome: number;
+    totalExpenses: number;
+    totalLabor: number;
+    totalHours: number;
+    totalCosts: number;
+    totalInvoiced: number;
+    totalCollected: number;
+    unpaidInvoices: number;
+    unpaidInvoiceBalance: number;
+    remainingContract: number;
+    profit: number;
+  };
+};
+
+type JobsResponse = {
+  ok: boolean;
+  jobs?: JobListItem[];
+  error?: string;
+};
+
+type JobDetailResponse = {
+  ok: boolean;
+  job?: JobListItem;
+  error?: string;
+};
+
+type ClockInJobOption = {
+  id: number;
+  jobName: string;
+  jobCode: string | null;
+  clientName: string | null;
+  status: string | null;
+};
+
+type ClockInJobsResponse = {
+  ok: boolean;
+  jobs?: ClockInJobOption[];
+  error?: string;
+};
+
+type TimesheetEntry = {
+  id: number;
+  employeeId: number;
+  employeeName: string;
+  date: string;
+  jobId: number | null;
+  jobName: string | null;
+  hours: number;
+  note: string | null;
+  clockInAt: string | null;
+  clockOutAt: string | null;
+  entryMethod: string | null;
+  approvalStatus: string | null;
+  hasPendingEditRequest: boolean;
+};
+
+type TimesheetsResponse = {
+  ok: boolean;
+  scope?: {
+    employeeId: number;
+    start: string;
+    end: string;
+    isEmployeeUser: boolean;
+    canApproveTime: boolean;
+    canUseSelfClock: boolean;
+  };
+  summary?: {
+    entryCount: number;
+    totalHours: number;
+    weekApproved: boolean;
+    approvedAt: string | null;
+    approvedByName: string | null;
+  };
+  activeClockEntry?: {
+    id: number;
+    jobId: number | null;
+    jobName: string | null;
+    clockInAt: string;
+  } | null;
+  timesheets?: TimesheetEntry[];
+  error?: string;
+};
+
+type ClockOutResponse = {
+  ok: boolean;
+  entry?: {
+    id: number;
+    jobId: number | null;
+    jobName: string | null;
+    clockInAt: string;
+    clockOutAt: string;
+    hours: number;
+    note: string | null;
+  };
+  error?: string;
+};
+
+type AppTab = 'jobs' | 'timesheets';
+
+function hasPermission(user: User | null, permission: string) {
+  return Array.isArray(user?.permissions) && user!.permissions.includes(permission);
 }
 
-function formatPercent(value: number | null | undefined): string {
-  const amount = Number(value ?? 0);
-  return `${amount.toFixed(2)}%`;
-}
-
-function formatDate(value: string | null | undefined): string {
-  if (!value) return '—';
-  return value;
-}
-
-function formatDateTime(value: string | null | undefined): string {
+function formatDateTime(value: string | null | undefined) {
   if (!value) return '—';
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
+  if (Number.isNaN(date.getTime())) return value;
 
   return date.toLocaleString();
 }
 
-function formatHours(value: number | null | undefined): string {
-  const amount = Number(value ?? 0);
-  return `${amount.toFixed(2)} hrs`;
+function formatDate(value: string | null | undefined) {
+  if (!value) return '—';
+
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleDateString();
 }
 
-function mapApiError(data: unknown, fallback: string): string {
-  if (typeof data === 'object' && data && 'error' in data) {
-    const error = (data as { error?: unknown }).error;
-    if (typeof error === 'string' && error.trim()) {
-      return error;
+function formatHours(hours: number | null | undefined) {
+  return `${Number(hours || 0).toFixed(2)} hrs`;
+}
+
+function formatDuration(seconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+
+  return `${hours}h ${minutes}m`;
+}
+
+function getWeekStart(date: Date) {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  const day = copy.getDay();
+  const diff = (day + 6) % 7; // Monday start
+  copy.setDate(copy.getDate() - diff);
+  return copy;
+}
+
+function getEntryDurationSeconds(
+  entry:
+    | TimesheetEntry
+    | {
+        id: number;
+        date?: string;
+        clockInAt: string | null;
+        clockOutAt: string | null;
+      },
+  now: Date,
+) {
+  if (!entry.clockInAt) return 0;
+
+  const start = new Date(entry.clockInAt);
+  if (Number.isNaN(start.getTime())) return 0;
+
+  const end = entry.clockOutAt ? new Date(entry.clockOutAt) : now;
+  if (Number.isNaN(end.getTime())) return 0;
+
+  const diff = (end.getTime() - start.getTime()) / 1000;
+  return diff > 0 ? diff : 0;
+}
+
+function buildTimesheetMetrics(
+  entries: TimesheetEntry[],
+  activeClockEntry: TimesheetsResponse['activeClockEntry'] | null,
+) {
+  const now = new Date();
+  const todayKey = now.toDateString();
+  const weekStart = getWeekStart(now).getTime();
+
+  const mergedEntries: Array<{
+    id: number;
+    date?: string;
+    clockInAt: string | null;
+    clockOutAt: string | null;
+  }> = [...entries];
+
+  if (
+    activeClockEntry?.id &&
+    !mergedEntries.some((entry) => entry.id === activeClockEntry.id)
+  ) {
+    mergedEntries.push({
+      id: activeClockEntry.id,
+      date: activeClockEntry.clockInAt.slice(0, 10),
+      clockInAt: activeClockEntry.clockInAt,
+      clockOutAt: null,
+    });
+  }
+
+  let todaySeconds = 0;
+  let weekSeconds = 0;
+
+  for (const entry of mergedEntries) {
+    if (!entry.clockInAt) continue;
+
+    const start = new Date(entry.clockInAt);
+    if (Number.isNaN(start.getTime())) continue;
+
+    const durationSeconds = getEntryDurationSeconds(entry, now);
+
+    if (start.toDateString() === todayKey) {
+      todaySeconds += durationSeconds;
+    }
+
+    if (start.getTime() >= weekStart) {
+      weekSeconds += durationSeconds;
     }
   }
 
-  return fallback;
+  return {
+    todayHours: todaySeconds / 3600,
+    weekHours: weekSeconds / 3600,
+  };
 }
 
-export default function HomeScreen() {
-  const [tenant, setTenant] = useState('');
+async function parseJsonResponse(response: Response) {
+  const text = await response.text();
+
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    const snippet = text.trim().slice(0, 120);
+    throw new Error(
+      snippet
+        ? `Server returned a non-JSON response: ${snippet}`
+        : 'Server returned a non-JSON response.',
+    );
+  }
+}
+
+function errorMessageFromCode(error?: string) {
+  switch (error) {
+    case 'tenant_required':
+      return 'Tenant is required. Confirm your tenant subdomain and try again.';
+    case 'invalid_login':
+      return 'Login failed. Check your email and password.';
+    case 'employee_required':
+      return 'Your user is not linked to an employee record yet.';
+    case 'already_clocked_in':
+      return 'You are already clocked in.';
+    case 'not_clocked_in':
+      return 'You are not currently clocked in.';
+    case 'invalid_job':
+      return 'That job is no longer valid. Refresh jobs and try again.';
+    case 'unauthorized':
+      return 'Your session is no longer valid. Please sign in again.';
+    default:
+      return error ? `Request failed: ${error}` : 'Something went wrong. Please try again.';
+  }
+}
+
+export default function IndexScreen() {
+  const [tenantInput, setTenantInput] = useState('');
+  const [tenantSubdomain, setTenantSubdomain] = useState('');
+  const [token, setToken] = useState('');
+  const [user, setUser] = useState<User | null>(null);
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const [selectedTenant, setSelectedTenant] = useState('');
-  const [token, setToken] = useState('');
+  const [booting, setBooting] = useState(true);
+  const [authLoading, setAuthLoading] = useState(false);
+
   const [activeTab, setActiveTab] = useState<AppTab>('jobs');
 
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [selectedJob, setSelectedJob] = useState<JobDetail | null>(null);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [jobsRefreshing, setJobsRefreshing] = useState(false);
+  const [jobs, setJobs] = useState<JobListItem[]>([]);
+  const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
+  const [selectedJob, setSelectedJob] = useState<JobListItem | null>(null);
+  const [jobDetailLoading, setJobDetailLoading] = useState(false);
 
-  const [timesheetScope, setTimesheetScope] = useState<TimesheetScope | null>(null);
-  const [timesheetSummary, setTimesheetSummary] = useState<TimesheetSummary | null>(null);
-  const [activeClockEntry, setActiveClockEntry] = useState<ActiveClockEntry | null>(null);
-  const [timesheets, setTimesheets] = useState<TimesheetEntry[]>([]);
+  const [timesheetsLoading, setTimesheetsLoading] = useState(false);
+  const [timesheetsRefreshing, setTimesheetsRefreshing] = useState(false);
+  const [clockActionLoading, setClockActionLoading] = useState(false);
+  const [timesheetSummary, setTimesheetSummary] = useState<TimesheetsResponse['summary'] | null>(null);
+  const [activeClockEntry, setActiveClockEntry] = useState<TimesheetsResponse['activeClockEntry'] | null>(null);
+  const [timesheetEntries, setTimesheetEntries] = useState<TimesheetEntry[]>([]);
+  const [clockInJobId, setClockInJobId] = useState<number | null>(null);
+  const [clockInJobsLoading, setClockInJobsLoading] = useState(false);
+  const [clockInJobs, setClockInJobs] = useState<ClockInJobOption[]>([]);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  const [statusText, setStatusText] = useState('Loading app...');
-  const [errorText, setErrorText] = useState('');
-  const [isBooting, setIsBooting] = useState(true);
-  const [isWorking, setIsWorking] = useState(false);
-  const [isRefreshingJobs, setIsRefreshingJobs] = useState(false);
-  const [isLoadingJobDetail, setIsLoadingJobDetail] = useState(false);
-  const [isRefreshingTimesheets, setIsRefreshingTimesheets] = useState(false);
-  const [isClockActionRunning, setIsClockActionRunning] = useState(false);
+  const isAuthenticated = Boolean(token && tenantSubdomain && user);
+  const canViewJobs = hasPermission(user, 'jobs.view');
+  const canClockTime = hasPermission(user, 'time.clock');
 
-  async function getCsrfToken(tenantSubdomain: string): Promise<string> {
-    const response = await fetch(`${API_BASE_URL}/api/csrf-token`, {
-      headers: {
-        'X-Tenant-Subdomain': tenantSubdomain,
-        Accept: 'application/json',
-      },
-    });
+  const selectedJobCard = useMemo(
+    () => jobs.find((job) => job.id === selectedJobId) ?? null,
+    [jobs, selectedJobId],
+  );
 
-    const data = await response.json();
-
-    if (!response.ok || !data.ok || !data.csrfToken) {
-      throw new Error('Could not fetch CSRF token.');
+  const selectedClockInJob = useMemo(() => {
+    if (canViewJobs) {
+      return jobs.find((job) => job.id === clockInJobId) ?? null;
     }
 
-    return data.csrfToken as string;
-  }
+    return clockInJobs.find((job) => job.id === clockInJobId) ?? null;
+  }, [canViewJobs, clockInJobId, clockInJobs, jobs]);
 
-  async function loadJobsWithToken(
-    tenantSubdomain: string,
-    bearerToken: string,
-  ): Promise<Job[]> {
-    const jobsResponse = await fetch(`${API_BASE_URL}/api/jobs`, {
-      headers: {
-        Authorization: `Bearer ${bearerToken}`,
-        'X-Tenant-Subdomain': tenantSubdomain,
-        Accept: 'application/json',
-      },
-    });
+  const timesheetMetrics = useMemo(
+    () => buildTimesheetMetrics(timesheetEntries, activeClockEntry),
+    [timesheetEntries, activeClockEntry],
+  );
 
-    const jobsData = await jobsResponse.json();
-
-    if (!jobsResponse.ok || !jobsData.ok) {
-      throw new Error(mapApiError(jobsData, 'Jobs failed to load.'));
-    }
-
-    return Array.isArray(jobsData.jobs) ? jobsData.jobs : [];
-  }
-
-  async function loadJobDetailWithToken(
-    tenantSubdomain: string,
-    bearerToken: string,
-    jobId: number,
-  ): Promise<JobDetail> {
-    const response = await fetch(`${API_BASE_URL}/api/jobs/${jobId}`, {
-      headers: {
-        Authorization: `Bearer ${bearerToken}`,
-        'X-Tenant-Subdomain': tenantSubdomain,
-        Accept: 'application/json',
-      },
-    });
-
-    const data = await response.json();
-
-    if (!response.ok || !data.ok || !data.job) {
-      throw new Error(mapApiError(data, 'Job detail failed to load.'));
-    }
-
-    return data.job as JobDetail;
-  }
-
-  async function loadTimesheetsWithToken(
-    tenantSubdomain: string,
-    bearerToken: string,
-  ): Promise<TimesheetResponse> {
-    const response = await fetch(`${API_BASE_URL}/api/timesheets`, {
-      headers: {
-        Authorization: `Bearer ${bearerToken}`,
-        'X-Tenant-Subdomain': tenantSubdomain,
-        Accept: 'application/json',
-      },
-    });
-
-    const data = await response.json();
-
-    if (!response.ok || !data.ok) {
-      throw new Error(mapApiError(data, 'Timesheets failed to load.'));
-    }
-
-    return {
-      scope: data.scope ?? null,
-      summary: data.summary ?? null,
-      activeClockEntry: data.activeClockEntry ?? null,
-      timesheets: Array.isArray(data.timesheets) ? data.timesheets : [],
-    };
-  }
-
-  async function postTimesheetAction(
-    tenantSubdomain: string,
-    bearerToken: string,
-    endpoint: '/api/timesheets/clock-in' | '/api/timesheets/clock-out',
-  ) {
-    const csrfToken = await getCsrfToken(tenantSubdomain);
-
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${bearerToken}`,
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': csrfToken,
-        'X-Tenant-Subdomain': tenantSubdomain,
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({}),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok || !data.ok) {
-      throw new Error(mapApiError(data, 'Timesheet action failed.'));
-    }
-
-    return data;
-  }
-
-  async function clearSavedAuth() {
-    await SecureStore.deleteItemAsync(STORAGE_KEYS.tenant);
-    await SecureStore.deleteItemAsync(STORAGE_KEYS.token);
-  }
-
-  async function saveAuth(tenantSubdomain: string, bearerToken: string) {
-    await SecureStore.setItemAsync(STORAGE_KEYS.tenant, tenantSubdomain);
-    await SecureStore.setItemAsync(STORAGE_KEYS.token, bearerToken);
-  }
-
-  function resetTimesheetsState() {
-    setTimesheetScope(null);
-    setTimesheetSummary(null);
-    setActiveClockEntry(null);
-    setTimesheets([]);
-  }
-
-  async function refreshJobs(
-    tenantSubdomain: string,
-    bearerToken: string,
-    options?: { silent?: boolean },
-  ) {
-    const silent = options?.silent === true;
-
-    if (!silent) {
-      setIsRefreshingJobs(true);
-      setStatusText('Loading jobs...');
-    }
-
-    const loadedJobs = await loadJobsWithToken(tenantSubdomain, bearerToken);
-    setJobs(loadedJobs);
-  }
-
-  async function refreshTimesheets(
-    tenantSubdomain: string,
-    bearerToken: string,
-    options?: { silent?: boolean },
-  ) {
-    const silent = options?.silent === true;
-
-    if (!silent) {
-      setIsRefreshingTimesheets(true);
-      setStatusText('Loading timesheets...');
-    }
-
-    const data = await loadTimesheetsWithToken(tenantSubdomain, bearerToken);
-    setTimesheetScope(data.scope ?? null);
-    setTimesheetSummary(data.summary ?? null);
-    setActiveClockEntry(data.activeClockEntry ?? null);
-    setTimesheets(data.timesheets);
-  }
-
-  async function loadInitialAppData(
-    tenantSubdomain: string,
-    bearerToken: string,
-    options?: { silent?: boolean },
-  ) {
-    await refreshJobs(tenantSubdomain, bearerToken, options);
-    await refreshTimesheets(tenantSubdomain, bearerToken, { silent: true });
-  }
-
-  useEffect(() => {
-    async function bootApp() {
-      try {
-        setIsBooting(true);
-        setErrorText('');
-        setStatusText('Checking saved login...');
-
-        const savedTenant = await SecureStore.getItemAsync(STORAGE_KEYS.tenant);
-        const savedToken = await SecureStore.getItemAsync(STORAGE_KEYS.token);
-
-        if (!savedTenant || !savedToken) {
-          setStatusText('Enter your company subdomain to begin.');
-          return;
-        }
-
-        setTenant(savedTenant);
-        setSelectedTenant(savedTenant);
-        setToken(savedToken);
-
-        await loadInitialAppData(savedTenant, savedToken, { silent: true });
-        setStatusText(`Logged in to ${savedTenant}.`);
-      } catch (error) {
-        await clearSavedAuth();
-        setToken('');
-        setJobs([]);
-        setSelectedJob(null);
-        resetTimesheetsState();
-        setErrorText(error instanceof Error ? error.message : String(error));
-        setStatusText('Saved login expired. Please sign in again.');
-      } finally {
-        setIsBooting(false);
-        setIsRefreshingJobs(false);
-        setIsRefreshingTimesheets(false);
-      }
-    }
-
-    bootApp();
+  const saveSession = useCallback(async (nextTenant: string, nextToken: string, nextUser: User) => {
+    await SecureStore.setItemAsync(STORAGE_KEYS.tenant, nextTenant);
+    await SecureStore.setItemAsync(STORAGE_KEYS.token, nextToken);
+    await SecureStore.setItemAsync(STORAGE_KEYS.user, JSON.stringify(nextUser));
   }, []);
 
-  function continueToLogin() {
-    const trimmedTenant = tenant.trim().toLowerCase();
+  const clearSession = useCallback(async () => {
+    await SecureStore.deleteItemAsync(STORAGE_KEYS.tenant);
+    await SecureStore.deleteItemAsync(STORAGE_KEYS.token);
+    await SecureStore.deleteItemAsync(STORAGE_KEYS.user);
+  }, []);
 
-    if (!trimmedTenant) {
-      setStatusText('Please enter a tenant subdomain.');
+  const resetAuthenticatedState = useCallback(() => {
+    setJobs([]);
+    setSelectedJobId(null);
+    setSelectedJob(null);
+    setTimesheetSummary(null);
+    setActiveClockEntry(null);
+    setTimesheetEntries([]);
+    setClockInJobId(null);
+    setClockInJobs([]);
+    setElapsedSeconds(0);
+    setActiveTab('timesheets');
+  }, []);
+
+  const handleUnauthorized = useCallback(async () => {
+    await clearSession();
+    setToken('');
+    setUser(null);
+    setTenantSubdomain('');
+    resetAuthenticatedState();
+    Alert.alert('Session expired', 'Please sign in again.');
+  }, [clearSession, resetAuthenticatedState]);
+
+  const apiFetch = useCallback(
+    async (path: string, options?: RequestInit) => {
+      const headers = new Headers(options?.headers || {});
+      headers.set('Content-Type', 'application/json');
+      headers.set('X-Tenant-Subdomain', tenantSubdomain);
+
+      if (token) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+
+      const response = await fetch(`${CONFIG.API_BASE_URL}${path}`, {
+        ...options,
+        headers,
+      });
+
+      const data = await parseJsonResponse(response);
+
+      if (response.status === 401 || data?.error === 'unauthorized') {
+        await handleUnauthorized();
+        throw new Error('unauthorized');
+      }
+
+      if (!response.ok || data?.ok === false) {
+        throw new Error(errorMessageFromCode(data?.error));
+      }
+
+      return data;
+    },
+    [handleUnauthorized, tenantSubdomain, token],
+  );
+
+  const loadJobs = useCallback(
+    async (isRefresh = false) => {
+      if (!isAuthenticated || !canViewJobs) return;
+
+      if (isRefresh) {
+        setJobsRefreshing(true);
+      } else {
+        setJobsLoading(true);
+      }
+
+      try {
+        const data = (await apiFetch('/api/jobs')) as JobsResponse;
+        const nextJobs = Array.isArray(data.jobs) ? data.jobs : [];
+        setJobs(nextJobs);
+
+        if (clockInJobId && !nextJobs.some((job) => job.id === clockInJobId)) {
+          setClockInJobId(null);
+        }
+
+        if (selectedJobId && !nextJobs.some((job) => job.id === selectedJobId)) {
+          setSelectedJobId(null);
+          setSelectedJob(null);
+        }
+      } catch (error) {
+        if ((error as Error).message !== 'unauthorized') {
+          Alert.alert('Jobs', (error as Error).message);
+        }
+      } finally {
+        if (isRefresh) {
+          setJobsRefreshing(false);
+        } else {
+          setJobsLoading(false);
+        }
+      }
+    },
+    [apiFetch, canViewJobs, clockInJobId, isAuthenticated, selectedJobId],
+  );
+
+  const loadClockInJobs = useCallback(
+    async (isRefresh = false) => {
+      if (!isAuthenticated || !canClockTime || canViewJobs) return;
+
+      if (!isRefresh) {
+        setClockInJobsLoading(true);
+      }
+
+      try {
+        const data = (await apiFetch('/api/timesheets/clock-in-jobs')) as ClockInJobsResponse;
+        const nextJobs = Array.isArray(data.jobs) ? data.jobs : [];
+        setClockInJobs(nextJobs);
+
+        if (clockInJobId && !nextJobs.some((job) => job.id === clockInJobId)) {
+          setClockInJobId(null);
+        }
+      } catch (error) {
+        if ((error as Error).message !== 'unauthorized') {
+          Alert.alert('Clock-In Jobs', (error as Error).message);
+        }
+      } finally {
+        if (!isRefresh) {
+          setClockInJobsLoading(false);
+        }
+      }
+    },
+    [apiFetch, canClockTime, canViewJobs, clockInJobId, isAuthenticated],
+  );
+
+  const loadJobDetail = useCallback(
+    async (jobId: number) => {
+      if (!isAuthenticated || !canViewJobs) return;
+
+      setJobDetailLoading(true);
+      try {
+        const data = (await apiFetch(`/api/jobs/${jobId}`)) as JobDetailResponse;
+        setSelectedJob(data.job ?? null);
+        setSelectedJobId(jobId);
+      } catch (error) {
+        if ((error as Error).message !== 'unauthorized') {
+          Alert.alert('Job Detail', (error as Error).message);
+        }
+      } finally {
+        setJobDetailLoading(false);
+      }
+    },
+    [apiFetch, canViewJobs, isAuthenticated],
+  );
+
+  const loadTimesheets = useCallback(
+    async (isRefresh = false) => {
+      if (!isAuthenticated) return;
+
+      if (isRefresh) {
+        setTimesheetsRefreshing(true);
+      } else {
+        setTimesheetsLoading(true);
+      }
+
+      try {
+        const data = (await apiFetch('/api/timesheets')) as TimesheetsResponse;
+        setTimesheetSummary(data.summary ?? null);
+        setActiveClockEntry(data.activeClockEntry ?? null);
+        setTimesheetEntries(Array.isArray(data.timesheets) ? data.timesheets : []);
+      } catch (error) {
+        if ((error as Error).message !== 'unauthorized') {
+          Alert.alert('Timesheets', (error as Error).message);
+        }
+      } finally {
+        if (isRefresh) {
+          setTimesheetsRefreshing(false);
+        } else {
+          setTimesheetsLoading(false);
+        }
+      }
+    },
+    [apiFetch, isAuthenticated],
+  );
+
+  const handleLogin = useCallback(async () => {
+    const cleanedTenant = tenantInput.trim().toLowerCase();
+    const cleanedEmail = email.trim().toLowerCase();
+
+    if (!cleanedTenant) {
+      Alert.alert('Tenant Required', 'Enter your company subdomain to continue.');
       return;
     }
 
-    setSelectedTenant(trimmedTenant);
-    setJobs([]);
-    setSelectedJob(null);
-    resetTimesheetsState();
-    setToken('');
-    setErrorText('');
-    setStatusText(`Tenant selected: ${trimmedTenant}. Please log in.`);
-  }
+    if (!cleanedEmail || !password) {
+      Alert.alert('Login Required', 'Enter your email and password.');
+      return;
+    }
 
-  async function loginAndLoadData() {
+    setAuthLoading(true);
     try {
-      if (!selectedTenant) {
-        setStatusText('Please choose a tenant first.');
-        return;
-      }
-
-      if (!email.trim() || !password) {
-        setStatusText('Please enter your email and password.');
-        return;
-      }
-
-      setIsWorking(true);
-      setErrorText('');
-      setStatusText('Signing in...');
-
-      const csrfToken = await getCsrfToken(selectedTenant);
-
-      const loginResponse = await fetch(`${API_BASE_URL}/api/mobile/login`, {
+      const response = await fetch(`${CONFIG.API_BASE_URL}/api/mobile/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRF-Token': csrfToken,
-          'X-Tenant-Subdomain': selectedTenant,
-          Accept: 'application/json',
+          'X-Tenant-Subdomain': cleanedTenant,
         },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          password,
-        }),
+        body: JSON.stringify({ email: cleanedEmail, password }),
       });
 
-      const loginData = await loginResponse.json();
+      const data = await parseJsonResponse(response);
 
-      if (!loginResponse.ok || !loginData.ok || !loginData.token) {
-        setErrorText(JSON.stringify(loginData, null, 2));
-        setStatusText('Login failed.');
-        return;
+      if (!response.ok || !data?.ok) {
+        throw new Error(errorMessageFromCode(data?.error));
       }
 
-      const bearerToken = String(loginData.token);
-
-      await loadInitialAppData(selectedTenant, bearerToken, { silent: true });
-      await saveAuth(selectedTenant, bearerToken);
-
-      setToken(bearerToken);
-      setActiveTab('jobs');
-      setSelectedJob(null);
+      const payload = data as LoginResponse;
+      setTenantSubdomain(cleanedTenant);
+      setTenantInput(cleanedTenant);
+      setToken(payload.token);
+      setUser(payload.user);
+      await saveSession(cleanedTenant, payload.token, payload.user);
       setPassword('');
-      setStatusText(`Logged in to ${selectedTenant}.`);
+      resetAuthenticatedState();
     } catch (error) {
-      setErrorText(error instanceof Error ? error.message : String(error));
-      setStatusText('Could not connect.');
+      Alert.alert('Sign In Failed', (error as Error).message);
     } finally {
-      setIsWorking(false);
-      setIsRefreshingJobs(false);
-      setIsRefreshingTimesheets(false);
+      setAuthLoading(false);
     }
-  }
+  }, [email, password, resetAuthenticatedState, saveSession, tenantInput]);
 
-  async function openJobDetail(jobId: number) {
+  const handleLogout = useCallback(async () => {
     try {
-      if (!token || !selectedTenant) {
-        setStatusText('You must be logged in.');
-        return;
-      }
-
-      setIsLoadingJobDetail(true);
-      setErrorText('');
-      setStatusText('Loading job details...');
-
-      const detail = await loadJobDetailWithToken(selectedTenant, token, jobId);
-      setSelectedJob(detail);
-      setStatusText(`Viewing job: ${detail.jobName || 'Job Detail'}`);
-    } catch (error) {
-      setErrorText(error instanceof Error ? error.message : String(error));
-      setStatusText('Could not load job detail.');
-    } finally {
-      setIsLoadingJobDetail(false);
-    }
-  }
-
-  function closeJobDetail() {
-    setSelectedJob(null);
-    setStatusText(`Logged in to ${selectedTenant}.`);
-  }
-
-  async function handleRefreshJobs() {
-    try {
-      if (!token || !selectedTenant) {
-        setStatusText('You must be logged in.');
-        return;
-      }
-
-      setErrorText('');
-      await refreshJobs(selectedTenant, token);
-      setStatusText('Jobs refreshed.');
-    } catch (error) {
-      setErrorText(error instanceof Error ? error.message : String(error));
-      setStatusText('Could not refresh jobs.');
-    } finally {
-      setIsRefreshingJobs(false);
-    }
-  }
-
-  async function handleRefreshTimesheets() {
-    try {
-      if (!token || !selectedTenant) {
-        setStatusText('You must be logged in.');
-        return;
-      }
-
-      setErrorText('');
-      await refreshTimesheets(selectedTenant, token);
-      setStatusText('Timesheets refreshed.');
-    } catch (error) {
-      setErrorText(error instanceof Error ? error.message : String(error));
-      setStatusText('Could not refresh timesheets.');
-    } finally {
-      setIsRefreshingTimesheets(false);
-    }
-  }
-
-  async function handleClockIn() {
-    try {
-      if (!token || !selectedTenant) {
-        setStatusText('You must be logged in.');
-        return;
-      }
-
-      setIsClockActionRunning(true);
-      setErrorText('');
-      setStatusText('Clocking in...');
-
-      await postTimesheetAction(selectedTenant, token, '/api/timesheets/clock-in');
-      await refreshTimesheets(selectedTenant, token, { silent: true });
-
-      setActiveTab('timesheets');
-      setStatusText('Clocked in successfully.');
-    } catch (error) {
-      setErrorText(error instanceof Error ? error.message : String(error));
-      setStatusText('Could not clock in.');
-    } finally {
-      setIsClockActionRunning(false);
-      setIsRefreshingTimesheets(false);
-    }
-  }
-
-  async function handleClockOut() {
-    try {
-      if (!token || !selectedTenant) {
-        setStatusText('You must be logged in.');
-        return;
-      }
-
-      setIsClockActionRunning(true);
-      setErrorText('');
-      setStatusText('Clocking out...');
-
-      await postTimesheetAction(selectedTenant, token, '/api/timesheets/clock-out');
-      await refreshTimesheets(selectedTenant, token, { silent: true });
-
-      setActiveTab('timesheets');
-      setStatusText('Clocked out successfully.');
-    } catch (error) {
-      setErrorText(error instanceof Error ? error.message : String(error));
-      setStatusText('Could not clock out.');
-    } finally {
-      setIsClockActionRunning(false);
-      setIsRefreshingTimesheets(false);
-    }
-  }
-
-  async function logout() {
-    try {
-      setIsWorking(true);
-
-      if (token && selectedTenant) {
-        const csrfToken = await getCsrfToken(selectedTenant);
-
-        await fetch(`${API_BASE_URL}/api/mobile/logout`, {
+      if (tenantSubdomain && token) {
+        await fetch(`${CONFIG.API_BASE_URL}/api/mobile/logout`, {
           method: 'POST',
           headers: {
+            'Content-Type': 'application/json',
+            'X-Tenant-Subdomain': tenantSubdomain,
             Authorization: `Bearer ${token}`,
-            'X-CSRF-Token': csrfToken,
-            'X-Tenant-Subdomain': selectedTenant,
-            Accept: 'application/json',
           },
         });
       }
     } catch {
-      // ignore logout errors
-    } finally {
-      await clearSavedAuth();
-      setToken('');
-      setJobs([]);
-      setSelectedJob(null);
-      resetTimesheetsState();
-      setPassword('');
-      setEmail('');
-      setSelectedTenant('');
-      setTenant('');
-      setActiveTab('jobs');
-      setErrorText('');
-      setStatusText('Signed out.');
-      setIsWorking(false);
-      setIsRefreshingJobs(false);
-      setIsRefreshingTimesheets(false);
-      setIsClockActionRunning(false);
+      // best effort logout
     }
-  }
 
-  const isLoggedIn = !!token;
-  const canUseSelfClock = !!timesheetScope?.canUseSelfClock;
-  const hasActiveClock = !!activeClockEntry;
+    await clearSession();
+    setToken('');
+    setUser(null);
+    setTenantSubdomain('');
+    setPassword('');
+    resetAuthenticatedState();
+  }, [clearSession, resetAuthenticatedState, tenantSubdomain, token]);
 
-  if (isBooting) {
+  const handleClockIn = useCallback(async () => {
+    if (!isAuthenticated) return;
+
+    setClockActionLoading(true);
+    try {
+      await apiFetch('/api/timesheets/clock-in', {
+        method: 'POST',
+        body: JSON.stringify({
+          jobId: clockInJobId ?? undefined,
+        }),
+      });
+      await loadTimesheets();
+      Alert.alert(
+        'Clocked In',
+        selectedClockInJob
+          ? `Your time entry has started on ${selectedClockInJob.jobName}.`
+          : 'Your time entry has started as general time.',
+      );
+    } catch (error) {
+      if ((error as Error).message !== 'unauthorized') {
+        Alert.alert('Clock In', (error as Error).message);
+      }
+    } finally {
+      setClockActionLoading(false);
+    }
+  }, [apiFetch, clockInJobId, isAuthenticated, loadTimesheets, selectedClockInJob]);
+
+  const handleClockOut = useCallback(async () => {
+    if (!isAuthenticated) return;
+
+    setClockActionLoading(true);
+    try {
+      const data = (await apiFetch('/api/timesheets/clock-out', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })) as ClockOutResponse;
+      await loadTimesheets();
+      Alert.alert(
+        'Clocked Out',
+        data.entry ? `Saved ${formatHours(data.entry.hours)} for this entry.` : 'Your time entry has been saved.',
+      );
+    } catch (error) {
+      if ((error as Error).message !== 'unauthorized') {
+        Alert.alert('Clock Out', (error as Error).message);
+      }
+    } finally {
+      setClockActionLoading(false);
+    }
+  }, [apiFetch, isAuthenticated, loadTimesheets]);
+
+  useEffect(() => {
+    const bootstrap = async () => {
+      try {
+        const [storedTenant, storedToken, storedUserJson] = await Promise.all([
+          SecureStore.getItemAsync(STORAGE_KEYS.tenant),
+          SecureStore.getItemAsync(STORAGE_KEYS.token),
+          SecureStore.getItemAsync(STORAGE_KEYS.user),
+        ]);
+
+        if (storedTenant) {
+          setTenantInput(storedTenant);
+          setTenantSubdomain(storedTenant);
+        }
+
+        if (storedToken && storedUserJson) {
+          setToken(storedToken);
+          setUser(JSON.parse(storedUserJson) as User);
+        }
+      } catch {
+        await clearSession();
+      } finally {
+        setBooting(false);
+      }
+    };
+
+    void bootstrap();
+  }, [clearSession]);
+
+  useEffect(() => {
+    if (!activeClockEntry?.clockInAt) {
+      setElapsedSeconds(0);
+      return;
+    }
+
+    const updateElapsed = () => {
+      const start = new Date(activeClockEntry.clockInAt).getTime();
+      const now = Date.now();
+      const diffSeconds = Math.max(0, Math.floor((now - start) / 1000));
+      setElapsedSeconds(diffSeconds);
+    };
+
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+
+    return () => clearInterval(interval);
+  }, [activeClockEntry]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !canViewJobs) return;
+    void loadJobs();
+  }, [canViewJobs, isAuthenticated, loadJobs]);
+
+  useEffect(() => {
+    if (!canViewJobs && activeTab === 'jobs') {
+      setActiveTab('timesheets');
+    }
+  }, [activeTab, canViewJobs]);
+
+  useEffect(() => {
+    if (!isAuthenticated || activeTab !== 'timesheets' || canViewJobs || !canClockTime) return;
+    void loadClockInJobs();
+  }, [activeTab, canClockTime, canViewJobs, isAuthenticated, loadClockInJobs]);
+
+  useEffect(() => {
+    if (!isAuthenticated || activeTab !== 'timesheets') return;
+    void loadTimesheets();
+  }, [activeTab, isAuthenticated, loadTimesheets]);
+
+  if (booting) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
-        <View
-          style={{
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 24,
-          }}
-        >
-          <ActivityIndicator size="large" />
-          <Text style={{ marginTop: 16 }}>{statusText}</Text>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centeredState}>
+          <ActivityIndicator size="large" color="#1E3A5F" />
+          <Text style={styles.loadingText}>Loading Hudson Business Solutions...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  if (selectedJob) {
+  if (!isAuthenticated) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
-        <ScrollView contentContainerStyle={{ padding: 24 }}>
-          <TouchableOpacity
-            onPress={closeJobDetail}
-            style={{
-              backgroundColor: '#1E3A5F',
-              paddingVertical: 12,
-              paddingHorizontal: 16,
-              borderRadius: 10,
-              marginBottom: 20,
-            }}
-          >
-            <Text style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>
-              Back to Jobs
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView contentContainerStyle={styles.authScrollContent}>
+          <View style={styles.authCard}>
+            <Text style={styles.brandEyebrow}>Mobile</Text>
+            <Text style={styles.authTitle}>Hudson Business Solutions</Text>
+            <Text style={styles.authSubtitle}>
+              Sign in with your company subdomain, email, and password.
             </Text>
-          </TouchableOpacity>
 
-          <Text style={{ fontSize: 28, fontWeight: '700', marginBottom: 8 }}>
-            {selectedJob.jobName || 'Unnamed Job'}
-          </Text>
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Company Subdomain</Text>
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!authLoading}
+                onChangeText={(value) => {
+                  setTenantInput(value);
+                  setTenantSubdomain('');
+                }}
+                placeholder="taylors"
+                placeholderTextColor="#9AA5B1"
+                style={styles.input}
+                value={tenantInput}
+              />
+            </View>
 
-          <Text style={{ fontSize: 16, marginBottom: 20 }}>
-            {selectedJob.clientName || '—'}
-          </Text>
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!authLoading}
+                keyboardType="email-address"
+                onChangeText={setEmail}
+                placeholder="you@company.com"
+                placeholderTextColor="#9AA5B1"
+                style={styles.input}
+                value={email}
+              />
+            </View>
 
-          <View
-            style={{
-              padding: 16,
-              borderWidth: 1,
-              borderColor: '#ddd',
-              borderRadius: 10,
-              marginBottom: 16,
-            }}
-          >
-            <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 12 }}>
-              Job Info
-            </Text>
-            <Text>Job Code: {selectedJob.jobCode || '—'}</Text>
-            <Text>Status: {selectedJob.status || '—'}</Text>
-            <Text>Start Date: {formatDate(selectedJob.startDate)}</Text>
-            <Text>Sold By: {selectedJob.soldBy || '—'}</Text>
-            <Text>Commission: {formatPercent(selectedJob.commissionPercent)}</Text>
-            <Text>Contract Amount: {formatMoney(selectedJob.contractAmount)}</Text>
-            <Text>Retainage: {formatPercent(selectedJob.retainagePercent)}</Text>
-            <Text>
-              Source Estimate Number: {selectedJob.sourceEstimateNumber || '—'}
-            </Text>
-            <Text>
-              Source Estimate Customer: {selectedJob.sourceEstimateCustomerName || '—'}
-            </Text>
-          </View>
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Password</Text>
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!authLoading}
+                onChangeText={setPassword}
+                placeholder="Password"
+                placeholderTextColor="#9AA5B1"
+                secureTextEntry
+                style={styles.input}
+                value={password}
+              />
+            </View>
 
-          <View
-            style={{
-              padding: 16,
-              borderWidth: 1,
-              borderColor: '#ddd',
-              borderRadius: 10,
-              marginBottom: 16,
-            }}
-          >
-            <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 12 }}>
-              Description
-            </Text>
-            <Text>{selectedJob.jobDescription || '—'}</Text>
-          </View>
-
-          <View
-            style={{
-              padding: 16,
-              borderWidth: 1,
-              borderColor: '#ddd',
-              borderRadius: 10,
-              marginBottom: 16,
-            }}
-          >
-            <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 12 }}>
-              Financials
-            </Text>
-            <Text>
-              Total Income: {formatMoney(selectedJob.financials?.totalIncome)}
-            </Text>
-            <Text>
-              Total Expenses: {formatMoney(selectedJob.financials?.totalExpenses)}
-            </Text>
-            <Text>
-              Total Labor: {formatMoney(selectedJob.financials?.totalLabor)}
-            </Text>
-            <Text>Total Hours: {Number(selectedJob.financials?.totalHours ?? 0).toFixed(2)}</Text>
-            <Text>
-              Total Costs: {formatMoney(selectedJob.financials?.totalCosts)}
-            </Text>
-            <Text>
-              Total Invoiced: {formatMoney(selectedJob.financials?.totalInvoiced)}
-            </Text>
-            <Text>
-              Total Collected: {formatMoney(selectedJob.financials?.totalCollected)}
-            </Text>
-            <Text>
-              Unpaid Invoices: {Number(selectedJob.financials?.unpaidInvoices ?? 0)}
-            </Text>
-            <Text>
-              Unpaid Invoice Balance: {formatMoney(selectedJob.financials?.unpaidInvoiceBalance)}
-            </Text>
-            <Text>
-              Remaining Contract: {formatMoney(selectedJob.financials?.remainingContract)}
-            </Text>
-            <Text>
-              Profit: {formatMoney(selectedJob.financials?.profit)}
-            </Text>
+            <Pressable disabled={authLoading} onPress={() => void handleLogin()} style={styles.primaryButton}>
+              {authLoading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Sign In</Text>
+              )}
+            </Pressable>
           </View>
         </ScrollView>
       </SafeAreaView>
     );
   }
 
+  if (selectedJob) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView contentContainerStyle={styles.screenContent}>
+          <Pressable onPress={() => setSelectedJob(null)} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>{canViewJobs ? 'Back to Jobs' : 'Back'}</Text>
+          </Pressable>
+
+          {jobDetailLoading ? (
+            <View style={styles.centeredStateCompact}>
+              <ActivityIndicator size="small" color="#1E3A5F" />
+            </View>
+          ) : (
+            <>
+              <View style={styles.heroCard}>
+                <Text style={styles.heroTitle}>{selectedJob.jobName}</Text>
+                <Text style={styles.heroMeta}>Customer: {selectedJob.customerName || '—'}</Text>
+                <Text style={styles.heroMeta}>Status: {selectedJob.status || '—'}</Text>
+              </View>
+
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Description</Text>
+                <Text style={styles.cardBody}>{selectedJob.description || 'No description available.'}</Text>
+              </View>
+
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Clock In Link</Text>
+                <Text style={styles.cardBody}>
+                  This job is selected for mobile clock-in from the Timesheets tab.
+                </Text>
+                <Pressable
+                  onPress={() => {
+                    setClockInJobId(selectedJob.id);
+                    setSelectedJob(null);
+                    setActiveTab('timesheets');
+                  }}
+                  style={styles.primaryButton}
+                >
+                  <Text style={styles.primaryButtonText}>Use This Job for Clock In</Text>
+                </Pressable>
+              </View>
+
+              {canViewJobs && selectedJob.financials ? (
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>Financials</Text>
+                  <View style={styles.metricGrid}>
+                    <View style={styles.metricCard}>
+                      <Text style={styles.metricLabel}>Income</Text>
+                      <Text style={styles.metricValue}>
+                        ${Number(selectedJob.financials?.totalIncome || 0).toFixed(2)}
+                      </Text>
+                    </View>
+                    <View style={styles.metricCard}>
+                      <Text style={styles.metricLabel}>Expenses</Text>
+                      <Text style={styles.metricValue}>
+                        ${Number(selectedJob.financials?.totalExpenses || 0).toFixed(2)}
+                      </Text>
+                    </View>
+                    <View style={styles.metricCard}>
+                      <Text style={styles.metricLabel}>Labor</Text>
+                      <Text style={styles.metricValue}>
+                        ${Number(selectedJob.financials?.totalLabor || 0).toFixed(2)}
+                      </Text>
+                    </View>
+                    <View style={styles.metricCard}>
+                      <Text style={styles.metricLabel}>Profit</Text>
+                      <Text style={styles.metricValue}>
+                        ${Number(selectedJob.financials?.profit || 0).toFixed(2)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ) : null}
+            </>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
-      <ScrollView contentContainerStyle={{ padding: 24 }}>
-        <Text style={{ fontSize: 28, fontWeight: '700', marginBottom: 8 }}>
-          Hudson Business Solutions
-        </Text>
-
-        <Text style={{ fontSize: 16, marginBottom: 16 }}>{statusText}</Text>
-
-        <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8 }}>
-          Company Subdomain
-        </Text>
-
-        <TextInput
-          value={tenant}
-          onChangeText={setTenant}
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!isLoggedIn && !isWorking}
-          placeholder="Example: taylors"
-          style={{
-            borderWidth: 1,
-            borderColor: '#ccc',
-            borderRadius: 10,
-            paddingHorizontal: 12,
-            paddingVertical: 12,
-            marginBottom: 12,
-            opacity: isLoggedIn ? 0.7 : 1,
-          }}
-        />
-
-        {!isLoggedIn ? (
-          <TouchableOpacity
-            onPress={continueToLogin}
-            disabled={isWorking}
-            style={{
-              backgroundColor: '#1E3A5F',
-              paddingVertical: 14,
-              paddingHorizontal: 16,
-              borderRadius: 10,
-              marginBottom: 20,
-              opacity: isWorking ? 0.7 : 1,
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView
+        contentContainerStyle={styles.screenContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={activeTab === 'jobs' ? jobsRefreshing : timesheetsRefreshing}
+            onRefresh={() => {
+              if (activeTab === 'jobs') {
+                void loadJobs(true);
+              } else {
+                void loadTimesheets(true);
+                if (!canViewJobs && canClockTime) {
+                  void loadClockInJobs(true);
+                }
+              }
             }}
-          >
-            <Text style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>
-              Continue
-            </Text>
-          </TouchableOpacity>
-        ) : null}
-
-        {selectedTenant ? (
-          <View style={{ marginBottom: 20 }}>
-            <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8 }}>
-              Email
-            </Text>
-
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              editable={!isLoggedIn && !isWorking}
-              placeholder="you@company.com"
-              style={{
-                borderWidth: 1,
-                borderColor: '#ccc',
-                borderRadius: 10,
-                paddingHorizontal: 12,
-                paddingVertical: 12,
-                marginBottom: 12,
-                opacity: isLoggedIn ? 0.7 : 1,
-              }}
-            />
-
-            <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8 }}>
-              Password
-            </Text>
-
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              editable={!isLoggedIn && !isWorking}
-              placeholder="Password"
-              style={{
-                borderWidth: 1,
-                borderColor: '#ccc',
-                borderRadius: 10,
-                paddingHorizontal: 12,
-                paddingVertical: 12,
-                marginBottom: 12,
-                opacity: isLoggedIn ? 0.7 : 1,
-              }}
-            />
-
-            {!isLoggedIn ? (
-              <TouchableOpacity
-                onPress={loginAndLoadData}
-                disabled={isWorking}
-                style={{
-                  backgroundColor: '#0F766E',
-                  paddingVertical: 14,
-                  paddingHorizontal: 16,
-                  borderRadius: 10,
-                  marginBottom: 12,
-                  opacity: isWorking ? 0.7 : 1,
-                }}
-              >
-                <Text style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>
-                  {isWorking ? 'Logging In...' : 'Log In'}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                onPress={logout}
-                disabled={isWorking}
-                style={{
-                  backgroundColor: '#7F1D1D',
-                  paddingVertical: 14,
-                  paddingHorizontal: 16,
-                  borderRadius: 10,
-                  marginBottom: 12,
-                  opacity: isWorking ? 0.7 : 1,
-                }}
-              >
-                <Text style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>
-                  {isWorking ? 'Signing Out...' : 'Log Out'}
-                </Text>
-              </TouchableOpacity>
-            )}
+          />
+        }
+      >
+        <View style={styles.headerRow}>
+          <View style={styles.headerCopy}>
+            <Text style={styles.brandEyebrow}>{tenantSubdomain}</Text>
+            <Text style={styles.screenTitle}>Welcome, {user?.name}</Text>
+            <Text style={styles.screenSubtitle}>{user?.role}</Text>
           </View>
-        ) : null}
+          <Pressable onPress={() => void handleLogout()} style={styles.logoutButton}>
+            <Text style={styles.logoutButtonText}>Log Out</Text>
+          </Pressable>
+        </View>
 
-        {errorText ? (
-          <View style={{ marginBottom: 20, padding: 12, borderWidth: 1, borderColor: '#ccc' }}>
-            <Text style={{ fontWeight: '700', marginBottom: 8 }}>Error</Text>
-            <Text>{errorText}</Text>
-          </View>
-        ) : null}
-
-        {isLoggedIn ? (
-          <View style={{ flexDirection: 'row', marginBottom: 20, gap: 12 }}>
-            <TouchableOpacity
+        <View style={styles.tabBar}>
+          {canViewJobs ? (
+            <Pressable
               onPress={() => setActiveTab('jobs')}
-              style={{
-                flex: 1,
-                backgroundColor: activeTab === 'jobs' ? '#1E3A5F' : '#E5E7EB',
-                paddingVertical: 12,
-                borderRadius: 10,
-              }}
+              style={[styles.tabButton, activeTab === 'jobs' && styles.tabButtonActive]}
             >
-              <Text
-                style={{
-                  textAlign: 'center',
-                  fontWeight: '700',
-                  color: activeTab === 'jobs' ? '#fff' : '#111827',
-                }}
-              >
+              <Text style={[styles.tabButtonText, activeTab === 'jobs' && styles.tabButtonTextActive]}>
                 Jobs
               </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => setActiveTab('timesheets')}
-              style={{
-                flex: 1,
-                backgroundColor: activeTab === 'timesheets' ? '#1E3A5F' : '#E5E7EB',
-                paddingVertical: 12,
-                borderRadius: 10,
-              }}
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={() => setActiveTab('timesheets')}
+            style={[styles.tabButton, activeTab === 'timesheets' && styles.tabButtonActive]}
+          >
+            <Text
+              style={[
+                styles.tabButtonText,
+                activeTab === 'timesheets' && styles.tabButtonTextActive,
+              ]}
             >
-              <Text
-                style={{
-                  textAlign: 'center',
-                  fontWeight: '700',
-                  color: activeTab === 'timesheets' ? '#fff' : '#111827',
-                }}
-              >
-                Timesheets
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
+              Timesheets
+            </Text>
+          </Pressable>
+        </View>
 
         {activeTab === 'jobs' ? (
-          <>
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 12,
-              }}
-            >
-              <Text style={{ fontSize: 20, fontWeight: '600' }}>Jobs</Text>
-
-              {isLoggedIn ? (
-                <TouchableOpacity
-                  onPress={handleRefreshJobs}
-                  disabled={isRefreshingJobs || isLoadingJobDetail}
-                >
-                  <Text style={{ color: '#1E3A5F', fontWeight: '700' }}>
-                    {isRefreshingJobs ? 'Refreshing...' : 'Refresh'}
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-
-            {isLoadingJobDetail ? (
-              <View style={{ paddingVertical: 24 }}>
-                <ActivityIndicator size="large" />
-                <Text style={{ marginTop: 12, textAlign: 'center' }}>
-                  Loading job details...
-                </Text>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Jobs</Text>
+            <Text style={styles.helperText}>
+              Open a job to review details or choose a job for clock-in.
+            </Text>
+            {jobsLoading ? (
+              <View style={styles.centeredStateCompact}>
+                <ActivityIndicator size="small" color="#1E3A5F" />
               </View>
             ) : jobs.length === 0 ? (
-              <Text>No jobs loaded yet.</Text>
+              <Text style={styles.emptyText}>No jobs found.</Text>
             ) : (
               jobs.map((job) => (
-                <TouchableOpacity
-                  key={job.id}
-                  onPress={() => openJobDetail(job.id)}
-                  style={{
-                    padding: 14,
-                    marginBottom: 12,
-                    borderWidth: 1,
-                    borderColor: '#ddd',
-                    borderRadius: 10,
-                    backgroundColor: '#fff',
-                  }}
-                >
-                  <Text style={{ fontSize: 18, fontWeight: '600' }}>
-                    {job.jobName || 'Unnamed Job'}
-                  </Text>
-                  <Text>Job Code: {job.jobCode || '—'}</Text>
-                  <Text>Client: {job.clientName || '—'}</Text>
-                  <Text>Status: {job.status || '—'}</Text>
-                  <Text style={{ marginTop: 8, color: '#1E3A5F', fontWeight: '600' }}>
-                    Tap to view details
-                  </Text>
-                </TouchableOpacity>
+                <Pressable key={job.id} onPress={() => void loadJobDetail(job.id)} style={styles.listItem}>
+                  <Text style={styles.listItemTitle}>{job.jobName}</Text>
+                  <Text style={styles.listItemMeta}>Customer: {job.customerName || '—'}</Text>
+                  <Text style={styles.listItemMeta}>Status: {job.status || '—'}</Text>
+                  {clockInJobId === job.id ? (
+                    <Text style={styles.selectedTag}>Selected for clock-in</Text>
+                  ) : null}
+                </Pressable>
               ))
             )}
-          </>
+          </View>
         ) : (
           <>
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 12,
-              }}
-            >
-              <Text style={{ fontSize: 20, fontWeight: '600' }}>Timesheets</Text>
-
-              {isLoggedIn ? (
-                <TouchableOpacity
-                  onPress={handleRefreshTimesheets}
-                  disabled={isRefreshingTimesheets || isClockActionRunning}
-                >
-                  <Text style={{ color: '#1E3A5F', fontWeight: '700' }}>
-                    {isRefreshingTimesheets ? 'Refreshing...' : 'Refresh'}
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
+            <View style={styles.heroCard}>
+              <Text style={styles.heroTitle}>Timesheets</Text>
+              <Text style={styles.heroMeta}>
+                Week total: {formatHours(timesheetMetrics.weekHours)}
+              </Text>
+              <Text style={styles.heroMeta}>
+                Today: {formatHours(timesheetMetrics.todayHours)}
+              </Text>
+              <Text style={styles.heroMeta}>
+                Entries: {timesheetSummary?.entryCount ?? 0}
+              </Text>
             </View>
 
-            <View
-              style={{
-                padding: 16,
-                borderWidth: 1,
-                borderColor: '#ddd',
-                borderRadius: 10,
-                marginBottom: 16,
-              }}
-            >
-              <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 12 }}>
-                This Week
-              </Text>
-              <Text>Entries: {Number(timesheetSummary?.entryCount ?? 0)}</Text>
-              <Text>Total Hours: {formatHours(timesheetSummary?.totalHours)}</Text>
-              <Text>
-                Week Approved: {timesheetSummary?.weekApproved ? 'Yes' : 'No'}
-              </Text>
-              <Text>Approved At: {formatDateTime(timesheetSummary?.approvedAt)}</Text>
-              <Text>Approved By: {timesheetSummary?.approvedByName || '—'}</Text>
-              <Text>Week Start: {formatDate(timesheetScope?.start)}</Text>
-              <Text>Week End: {formatDate(timesheetScope?.end)}</Text>
-            </View>
-
-            <View
-              style={{
-                padding: 16,
-                borderWidth: 1,
-                borderColor: hasActiveClock ? '#0F766E' : '#ddd',
-                borderRadius: 10,
-                marginBottom: 16,
-                backgroundColor: hasActiveClock ? '#F0FDF4' : '#fff',
-              }}
-            >
-              <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 12 }}>
-                Clock Status
-              </Text>
-
-              {hasActiveClock ? (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Clock In Job</Text>
+              {canViewJobs ? (
                 <>
-                  <Text>Status: Clocked In</Text>
-                  <Text>Clock In Time: {formatDateTime(activeClockEntry?.clockInAt)}</Text>
-                  <Text>Job: {activeClockEntry?.jobName || 'No job selected'}</Text>
+                  <Text style={styles.cardBody}>
+                    Pick a job before clocking in, or use general time if you are not tied to one job.
+                  </Text>
+                  <View style={styles.selectionBox}>
+                    <Text style={styles.selectionLabel}>Current selection</Text>
+                    <Text style={styles.selectionValue}>
+                      {selectedClockInJob ? selectedClockInJob.jobName : 'General time (no job)'}
+                    </Text>
+                    <Text style={styles.selectionHelper}>
+                      {'clientName' in (selectedClockInJob || {}) && selectedClockInJob?.clientName
+                        ? `Customer: ${selectedClockInJob.clientName}`
+                        : 'No job will be attached to the entry.'}
+                    </Text>
+                  </View>
+
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                    <Pressable
+                      onPress={() => setClockInJobId(null)}
+                      style={[styles.choiceChip, clockInJobId === null && styles.choiceChipActive]}
+                    >
+                      <Text style={[styles.choiceChipText, clockInJobId === null && styles.choiceChipTextActive]}>
+                        General Time
+                      </Text>
+                    </Pressable>
+                    {jobs.map((job) => (
+                      <Pressable
+                        key={job.id}
+                        onPress={() => setClockInJobId(job.id)}
+                        style={[styles.choiceChip, clockInJobId === job.id && styles.choiceChipActive]}
+                      >
+                        <Text
+                          style={[
+                            styles.choiceChipText,
+                            clockInJobId === job.id && styles.choiceChipTextActive,
+                          ]}
+                        >
+                          {job.jobName}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
                 </>
               ) : (
-                <Text>Status: Not clocked in</Text>
-              )}
+                <>
+                  <Text style={styles.cardBody}>
+                    Pick an active job for clock-in, or use general time if you are not tied to one job.
+                  </Text>
+                  <View style={styles.selectionBox}>
+                    <Text style={styles.selectionLabel}>Current selection</Text>
+                    <Text style={styles.selectionValue}>
+                      {selectedClockInJob ? selectedClockInJob.jobName : 'General time (no job)'}
+                    </Text>
+                    <Text style={styles.selectionHelper}>
+                      {selectedClockInJob?.clientName
+                        ? `Customer: ${selectedClockInJob.clientName}`
+                        : 'Only safe job fields are shown here for clock-in.'}
+                    </Text>
+                  </View>
 
-              {!canUseSelfClock ? (
-                <Text style={{ marginTop: 12 }}>
-                  Self clock is not available for this account.
-                </Text>
-              ) : hasActiveClock ? (
-                <TouchableOpacity
-                  onPress={handleClockOut}
-                  disabled={isClockActionRunning}
-                  style={{
-                    backgroundColor: '#7F1D1D',
-                    paddingVertical: 14,
-                    paddingHorizontal: 16,
-                    borderRadius: 10,
-                    marginTop: 16,
-                    opacity: isClockActionRunning ? 0.7 : 1,
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>
-                    {isClockActionRunning ? 'Clocking Out...' : 'Clock Out'}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  onPress={handleClockIn}
-                  disabled={isClockActionRunning}
-                  style={{
-                    backgroundColor: '#0F766E',
-                    paddingVertical: 14,
-                    paddingHorizontal: 16,
-                    borderRadius: 10,
-                    marginTop: 16,
-                    opacity: isClockActionRunning ? 0.7 : 1,
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>
-                    {isClockActionRunning ? 'Clocking In...' : 'Clock In'}
-                  </Text>
-                </TouchableOpacity>
+                  {clockInJobsLoading ? (
+                    <View style={styles.centeredStateCompact}>
+                      <ActivityIndicator size="small" color="#1E3A5F" />
+                    </View>
+                  ) : (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                      <Pressable
+                        onPress={() => setClockInJobId(null)}
+                        style={[styles.choiceChip, clockInJobId === null && styles.choiceChipActive]}
+                      >
+                        <Text style={[styles.choiceChipText, clockInJobId === null && styles.choiceChipTextActive]}>
+                          General Time
+                        </Text>
+                      </Pressable>
+                      {clockInJobs.map((job) => (
+                        <Pressable
+                          key={job.id}
+                          onPress={() => setClockInJobId(job.id)}
+                          style={[styles.choiceChip, clockInJobId === job.id && styles.choiceChipActive]}
+                        >
+                          <Text
+                            style={[
+                              styles.choiceChipText,
+                              clockInJobId === job.id && styles.choiceChipTextActive,
+                            ]}
+                          >
+                            {job.jobName}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  )}
+                </>
               )}
             </View>
 
-            <View
-              style={{
-                padding: 16,
-                borderWidth: 1,
-                borderColor: '#ddd',
-                borderRadius: 10,
-                marginBottom: 16,
-              }}
-            >
-              <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 12 }}>
-                Recent Entries
-              </Text>
-
-              {isRefreshingTimesheets ? (
-                <View style={{ paddingVertical: 12 }}>
-                  <ActivityIndicator size="small" />
-                  <Text style={{ marginTop: 10, textAlign: 'center' }}>
-                    Loading timesheets...
-                  </Text>
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Current Clock Status</Text>
+              {timesheetsLoading ? (
+                <View style={styles.centeredStateCompact}>
+                  <ActivityIndicator size="small" color="#1E3A5F" />
                 </View>
-              ) : timesheets.length === 0 ? (
-                <Text>No timesheet entries found for this week.</Text>
-              ) : (
-                timesheets.map((entry) => (
-                  <View
-                    key={entry.id}
-                    style={{
-                      paddingVertical: 12,
-                      borderTopWidth: 1,
-                      borderTopColor: '#eee',
-                    }}
+              ) : activeClockEntry ? (
+                <>
+                  <Text style={styles.cardBody}>You are currently clocked in.</Text>
+                  <Text style={styles.detailRow}>Clocked in for: {formatDuration(elapsedSeconds)}</Text>
+                  <Text style={styles.detailRow}>Clock In: {formatDateTime(activeClockEntry.clockInAt)}</Text>
+                  <Text style={styles.detailRow}>Job: {activeClockEntry.jobName || 'General time'}</Text>
+                  <Pressable
+                    disabled={clockActionLoading}
+                    onPress={() => void handleClockOut()}
+                    style={styles.primaryButton}
                   >
-                    <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 4 }}>
-                      {entry.date || 'No date'}
+                    {clockActionLoading ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.primaryButtonText}>Clock Out</Text>
+                    )}
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.cardBody}>You are not clocked in right now.</Text>
+                  <Text style={styles.helperText}>
+                    {selectedClockInJob
+                      ? `This entry will be attached to ${selectedClockInJob.jobName}.`
+                      : 'This entry will be saved as general time.'}
+                  </Text>
+                  <Pressable
+                    disabled={clockActionLoading}
+                    onPress={() => void handleClockIn()}
+                    style={styles.primaryButton}
+                  >
+                    {clockActionLoading ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.primaryButtonText}>Clock In</Text>
+                    )}
+                  </Pressable>
+                </>
+              )}
+            </View>
+
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Recent Entries</Text>
+              {canViewJobs && selectedJobCard ? (
+                <Text style={styles.helperText}>Selected from Jobs: {selectedJobCard.jobName}</Text>
+              ) : null}
+              {timesheetsLoading ? (
+                <View style={styles.centeredStateCompact}>
+                  <ActivityIndicator size="small" color="#1E3A5F" />
+                </View>
+              ) : timesheetEntries.length === 0 ? (
+                <Text style={styles.emptyText}>No timesheet entries found for the current week.</Text>
+              ) : (
+                timesheetEntries.map((entry) => (
+                  <View key={entry.id} style={styles.listItem}>
+                    <Text style={styles.listItemTitle}>{formatDate(entry.date)}</Text>
+                    <Text style={styles.listItemMeta}>Job: {entry.jobName || 'General time'}</Text>
+                    <Text style={styles.listItemMeta}>Hours: {formatHours(entry.hours)}</Text>
+                    <Text style={styles.listItemMeta}>
+                      Clock In: {formatDateTime(entry.clockInAt)}
                     </Text>
-                    <Text>Job: {entry.jobName || '—'}</Text>
-                    <Text>Hours: {formatHours(entry.hours)}</Text>
-                    <Text>Method: {entry.entryMethod || '—'}</Text>
-                    <Text>Status: {entry.approvalStatus || '—'}</Text>
-                    <Text>Clock In: {formatDateTime(entry.clockInAt)}</Text>
-                    <Text>Clock Out: {formatDateTime(entry.clockOutAt)}</Text>
-                    <Text>Note: {entry.note || '—'}</Text>
+                    <Text style={styles.listItemMeta}>
+                      Clock Out: {formatDateTime(entry.clockOutAt)}
+                    </Text>
+                    <Text style={styles.listItemMeta}>Status: {entry.approvalStatus || '—'}</Text>
+                    {entry.note ? <Text style={styles.listItemMeta}>Note: {entry.note}</Text> : null}
                   </View>
                 ))
               )}
@@ -1164,3 +1177,311 @@ export default function HomeScreen() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#F4F7FB',
+  },
+  authScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  screenContent: {
+    padding: 16,
+    gap: 16,
+  },
+  authCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#D9E2EC',
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  heroCard: {
+    backgroundColor: '#1E3A5F',
+    borderRadius: 18,
+    padding: 20,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#D9E2EC',
+    gap: 10,
+  },
+  brandEyebrow: {
+    color: '#F59E0B',
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  authTitle: {
+    color: '#102A43',
+    fontSize: 28,
+    fontWeight: '800',
+    marginTop: 8,
+  },
+  authSubtitle: {
+    color: '#52606D',
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  fieldGroup: {
+    marginBottom: 14,
+    gap: 6,
+  },
+  label: {
+    color: '#243B53',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  input: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#BCCCDC',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: '#102A43',
+    fontSize: 15,
+  },
+  primaryButton: {
+    backgroundColor: '#1E3A5F',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  secondaryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BCCCDC',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  secondaryButtonText: {
+    color: '#1E3A5F',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  helperText: {
+    color: '#7B8794',
+    fontSize: 13,
+  },
+  selectedTag: {
+    color: '#0F766E',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#52606D',
+    fontSize: 15,
+  },
+  centeredState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  centeredStateCompact: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  headerCopy: {
+    flex: 1,
+  },
+  screenTitle: {
+    color: '#102A43',
+    fontSize: 24,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  screenSubtitle: {
+    color: '#52606D',
+    fontSize: 14,
+    marginTop: 2,
+  },
+  logoutButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D9E2EC',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  logoutButtonText: {
+    color: '#B42318',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#EAF1F7',
+    borderRadius: 14,
+    padding: 4,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 10,
+  },
+  tabButtonActive: {
+    backgroundColor: '#FFFFFF',
+  },
+  tabButtonText: {
+    color: '#52606D',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  tabButtonTextActive: {
+    color: '#1E3A5F',
+  },
+  listItem: {
+    borderWidth: 1,
+    borderColor: '#E4E7EC',
+    borderRadius: 14,
+    padding: 14,
+    gap: 4,
+  },
+  listItemTitle: {
+    color: '#102A43',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  listItemMeta: {
+    color: '#52606D',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  emptyText: {
+    color: '#7B8794',
+    fontSize: 14,
+  },
+  heroTitle: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  heroMeta: {
+    color: '#D9E2EC',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  cardTitle: {
+    color: '#102A43',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  cardBody: {
+    color: '#52606D',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  detailRow: {
+    color: '#243B53',
+    fontSize: 14,
+  },
+  metricGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  metricCard: {
+    width: '48%',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E4E7EC',
+    borderRadius: 14,
+    padding: 12,
+    gap: 4,
+  },
+  metricLabel: {
+    color: '#52606D',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  metricValue: {
+    color: '#102A43',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  selectionBox: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E4E7EC',
+    borderRadius: 14,
+    padding: 14,
+    gap: 4,
+  },
+  selectionLabel: {
+    color: '#52606D',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  selectionValue: {
+    color: '#102A43',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  selectionHelper: {
+    color: '#7B8794',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  chipRow: {
+    gap: 8,
+    paddingRight: 8,
+  },
+  choiceChip: {
+    borderWidth: 1,
+    borderColor: '#BCCCDC',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  choiceChipActive: {
+    backgroundColor: '#1E3A5F',
+    borderColor: '#1E3A5F',
+  },
+  choiceChipText: {
+    color: '#243B53',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  choiceChipTextActive: {
+    color: '#FFFFFF',
+  },
+});
