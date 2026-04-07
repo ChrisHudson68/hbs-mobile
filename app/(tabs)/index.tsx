@@ -25,6 +25,17 @@ const STORAGE_KEYS = {
   user: 'hbs_mobile_user',
 } as const;
 
+const EXPENSE_CATEGORIES = [
+  'Materials',
+  'Fuel',
+  'Equipment Rental',
+  'Parts',
+  'Supplies',
+  'Meals',
+  'Travel',
+  'Other',
+] as const;
+
 type User = {
   id: number;
   name: string;
@@ -154,21 +165,23 @@ type ClockOutResponse = {
   error?: string;
 };
 
+type ParsedReceipt = {
+  merchantName?: string;
+  totalAmount?: number;
+  subtotalAmount?: number;
+  taxAmount?: number;
+  receiptDate?: string;
+  receiptNumber?: string;
+  paymentMethodLast4?: string;
+};
+
 type UploadedReceipt = {
   receiptFilename: string;
   status: string | null;
   ocrEngine: string | null;
   errorMessage: string | null;
   hasSuggestions: boolean;
-  parsed?: {
-    merchantName?: string;
-    totalAmount?: number;
-    subtotalAmount?: number;
-    taxAmount?: number;
-    receiptDate?: string;
-    receiptNumber?: string;
-    paymentMethodLast4?: string;
-  } | null;
+  parsed?: ParsedReceipt | null;
 };
 
 type UploadReceiptResponse = {
@@ -196,6 +209,12 @@ type ReceiptAsset = {
   uri: string;
   name: string;
   mimeType: string;
+};
+
+type AutoFilledFieldState = {
+  vendor: boolean;
+  amount: boolean;
+  date: boolean;
 };
 
 type AppTab = 'jobs' | 'timesheets' | 'expenses';
@@ -363,10 +382,10 @@ function errorMessageFromCode(error?: string) {
       return 'That job is no longer valid. Refresh jobs and try again.';
     case 'job_not_found':
       return 'That job could not be found.';
+    case 'receipt_required':
+      return 'Please select a receipt image before uploading.';
     case 'unauthorized':
       return 'Your session is no longer valid. Please sign in again.';
-    case 'receipt_required':
-      return 'Please select a receipt image first.';
     default:
       return error ? `Request failed: ${error}` : 'Something went wrong. Please try again.';
   }
@@ -377,6 +396,7 @@ function inferMimeTypeFromUri(uri: string) {
   if (lower.endsWith('.png')) return 'image/png';
   if (lower.endsWith('.webp')) return 'image/webp';
   if (lower.endsWith('.heic')) return 'image/heic';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
   return 'image/jpeg';
 }
 
@@ -394,9 +414,18 @@ function buildUploadFileName(uri: string) {
         ? 'webp'
         : mime === 'image/heic'
           ? 'heic'
-          : 'jpg';
+          : mime === 'application/pdf'
+            ? 'pdf'
+            : 'jpg';
 
   return `receipt-${Date.now()}.${extension}`;
+}
+
+function buildReceiptConfidenceText(receipt: UploadedReceipt | null) {
+  if (!receipt) return 'No OCR data available yet.';
+  if (receipt.errorMessage) return receipt.errorMessage;
+  if (receipt.hasSuggestions) return 'OCR found useful suggestions you can review below.';
+  return 'Receipt uploaded successfully, but OCR did not find strong suggestions.';
 }
 
 export default function IndexScreen() {
@@ -431,15 +460,20 @@ export default function IndexScreen() {
   const [clockInJobs, setClockInJobs] = useState<ClockInJobOption[]>([]);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  const [expenseSaving, setExpenseSaving] = useState(false);
   const [receiptUploading, setReceiptUploading] = useState(false);
-  const [expenseCategory, setExpenseCategory] = useState('');
+  const [expenseSaving, setExpenseSaving] = useState(false);
+  const [expenseCategory, setExpenseCategory] = useState<string>('Materials');
   const [expenseVendor, setExpenseVendor] = useState('');
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseDate, setExpenseDate] = useState(formatDateInputValue(new Date()));
   const [expenseJobId, setExpenseJobId] = useState<number | null>(null);
   const [expenseReceiptAsset, setExpenseReceiptAsset] = useState<ReceiptAsset | null>(null);
   const [uploadedReceipt, setUploadedReceipt] = useState<UploadedReceipt | null>(null);
+  const [autoFilledFields, setAutoFilledFields] = useState<AutoFilledFieldState>({
+    vendor: false,
+    amount: false,
+    date: false,
+  });
   const [lastSavedExpenseId, setLastSavedExpenseId] = useState<number | null>(null);
 
   const isAuthenticated = Boolean(token && tenantSubdomain && user);
@@ -471,6 +505,14 @@ export default function IndexScreen() {
     [timesheetEntries, activeClockEntry],
   );
 
+  const expenseReadyToSave = Boolean(
+    expenseJobId &&
+      expenseCategory.trim() &&
+      expenseAmount.trim() &&
+      expenseDate.trim() &&
+      uploadedReceipt?.receiptFilename,
+  );
+
   const saveSession = useCallback(async (nextTenant: string, nextToken: string, nextUser: User) => {
     await SecureStore.setItemAsync(STORAGE_KEYS.tenant, nextTenant);
     await SecureStore.setItemAsync(STORAGE_KEYS.token, nextToken);
@@ -484,13 +526,18 @@ export default function IndexScreen() {
   }, []);
 
   const resetExpenseForm = useCallback(() => {
-    setExpenseCategory('');
+    setExpenseCategory('Materials');
     setExpenseVendor('');
     setExpenseAmount('');
     setExpenseDate(formatDateInputValue(new Date()));
     setExpenseJobId(null);
     setExpenseReceiptAsset(null);
     setUploadedReceipt(null);
+    setAutoFilledFields({
+      vendor: false,
+      amount: false,
+      date: false,
+    });
     setLastSavedExpenseId(null);
   }, []);
 
@@ -802,10 +849,9 @@ export default function IndexScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
       quality: 0.85,
-      selectionLimit: 1,
     });
 
     if (result.canceled || !result.assets.length) {
@@ -823,6 +869,11 @@ export default function IndexScreen() {
       mimeType,
     });
     setUploadedReceipt(null);
+    setAutoFilledFields({
+      vendor: false,
+      amount: false,
+      date: false,
+    });
   }, [canManageMobileExpenses]);
 
   const handleUploadReceipt = useCallback(async () => {
@@ -839,7 +890,7 @@ export default function IndexScreen() {
         uri: expenseReceiptAsset.uri,
         name: expenseReceiptAsset.name,
         type: expenseReceiptAsset.mimeType,
-      } as unknown as Blob);
+      } as any);
 
       if (uploadedReceipt?.receiptFilename) {
         formData.append('pendingReceiptFilename', uploadedReceipt.receiptFilename);
@@ -854,19 +905,31 @@ export default function IndexScreen() {
         throw new Error('Receipt upload did not return a saved receipt.');
       }
 
+      const parsed = data.receipt.parsed ?? null;
+      const nextAutoFilled: AutoFilledFieldState = {
+        vendor: false,
+        amount: false,
+        date: false,
+      };
+
       setUploadedReceipt(data.receipt);
 
-      if (!expenseVendor.trim() && data.receipt.parsed?.merchantName) {
-        setExpenseVendor(data.receipt.parsed.merchantName);
+      if (!expenseVendor.trim() && parsed?.merchantName) {
+        setExpenseVendor(parsed.merchantName);
+        nextAutoFilled.vendor = true;
       }
 
-      if (!expenseAmount.trim() && typeof data.receipt.parsed?.totalAmount === 'number') {
-        setExpenseAmount(Number(data.receipt.parsed.totalAmount).toFixed(2));
+      if (!expenseAmount.trim() && typeof parsed?.totalAmount === 'number') {
+        setExpenseAmount(Number(parsed.totalAmount).toFixed(2));
+        nextAutoFilled.amount = true;
       }
 
-      if (!expenseDate.trim() && data.receipt.parsed?.receiptDate) {
-        setExpenseDate(data.receipt.parsed.receiptDate);
+      if (parsed?.receiptDate) {
+        setExpenseDate(parsed.receiptDate);
+        nextAutoFilled.date = true;
       }
+
+      setAutoFilledFields(nextAutoFilled);
 
       Alert.alert(
         'Receipt Uploaded',
@@ -879,7 +942,15 @@ export default function IndexScreen() {
     } finally {
       setReceiptUploading(false);
     }
-  }, [apiFetch, canManageMobileExpenses, expenseAmount, expenseDate, expenseReceiptAsset, expenseVendor, uploadedReceipt]);
+  }, [
+    apiFetch,
+    canManageMobileExpenses,
+    expenseAmount,
+    expenseDate,
+    expenseReceiptAsset,
+    expenseVendor,
+    uploadedReceipt,
+  ]);
 
   const handleSaveExpense = useCallback(async () => {
     if (!canManageMobileExpenses) return;
@@ -890,7 +961,7 @@ export default function IndexScreen() {
     }
 
     if (!expenseCategory.trim()) {
-      Alert.alert('Category Required', 'Enter an expense category.');
+      Alert.alert('Category Required', 'Select or enter an expense category.');
       return;
     }
 
@@ -904,6 +975,11 @@ export default function IndexScreen() {
       return;
     }
 
+    if (!uploadedReceipt?.receiptFilename) {
+      Alert.alert('Receipt Required', 'Upload the receipt before saving the expense.');
+      return;
+    }
+
     setExpenseSaving(true);
     try {
       const data = (await apiFetch('/api/expenses', {
@@ -914,7 +990,7 @@ export default function IndexScreen() {
           vendor: expenseVendor.trim() || undefined,
           amount: expenseAmount.trim(),
           date: expenseDate.trim(),
-          receiptFilename: uploadedReceipt?.receiptFilename,
+          receiptFilename: uploadedReceipt.receiptFilename,
         }),
       })) as CreateExpenseResponse;
 
@@ -945,7 +1021,7 @@ export default function IndexScreen() {
     expenseVendor,
     resetExpenseForm,
     selectedExpenseJob?.jobName,
-    uploadedReceipt?.receiptFilename,
+    uploadedReceipt,
   ]);
 
   useEffect(() => {
@@ -1088,11 +1164,7 @@ export default function IndexScreen() {
             </View>
 
             <Pressable disabled={authLoading} onPress={() => void handleLogin()} style={styles.primaryButton}>
-              {authLoading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Sign In</Text>
-              )}
+              {authLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Sign In</Text>}
             </Pressable>
           </View>
         </ScrollView>
@@ -1148,27 +1220,19 @@ export default function IndexScreen() {
                   <View style={styles.metricGrid}>
                     <View style={styles.metricCard}>
                       <Text style={styles.metricLabel}>Income</Text>
-                      <Text style={styles.metricValue}>
-                        ${Number(selectedJob.financials.totalIncome || 0).toFixed(2)}
-                      </Text>
+                      <Text style={styles.metricValue}>{formatCurrency(selectedJob.financials.totalIncome)}</Text>
                     </View>
                     <View style={styles.metricCard}>
                       <Text style={styles.metricLabel}>Expenses</Text>
-                      <Text style={styles.metricValue}>
-                        ${Number(selectedJob.financials.totalExpenses || 0).toFixed(2)}
-                      </Text>
+                      <Text style={styles.metricValue}>{formatCurrency(selectedJob.financials.totalExpenses)}</Text>
                     </View>
                     <View style={styles.metricCard}>
                       <Text style={styles.metricLabel}>Labor</Text>
-                      <Text style={styles.metricValue}>
-                        ${Number(selectedJob.financials.totalLabor || 0).toFixed(2)}
-                      </Text>
+                      <Text style={styles.metricValue}>{formatCurrency(selectedJob.financials.totalLabor)}</Text>
                     </View>
                     <View style={styles.metricCard}>
                       <Text style={styles.metricLabel}>Profit</Text>
-                      <Text style={styles.metricValue}>
-                        ${Number(selectedJob.financials.profit || 0).toFixed(2)}
-                      </Text>
+                      <Text style={styles.metricValue}>{formatCurrency(selectedJob.financials.profit)}</Text>
                     </View>
                   </View>
                 </View>
@@ -1225,7 +1289,7 @@ export default function IndexScreen() {
           <View style={styles.restrictedBanner}>
             <Text style={styles.restrictedBannerTitle}>Employee Mobile Access</Text>
             <Text style={styles.restrictedBannerBody}>
-              This mobile app is limited to clock in, clock out, and viewing your recent time entries.
+              This mobile app is limited to clock in, clock out, and viewing recent time entries.
             </Text>
           </View>
         ) : null}
@@ -1246,12 +1310,7 @@ export default function IndexScreen() {
             onPress={() => setActiveTab('timesheets')}
             style={[styles.tabButton, activeTab === 'timesheets' && styles.tabButtonActive]}
           >
-            <Text
-              style={[
-                styles.tabButtonText,
-                activeTab === 'timesheets' && styles.tabButtonTextActive,
-              ]}
-            >
+            <Text style={[styles.tabButtonText, activeTab === 'timesheets' && styles.tabButtonTextActive]}>
               Timesheets
             </Text>
           </Pressable>
@@ -1261,12 +1320,7 @@ export default function IndexScreen() {
               onPress={() => setActiveTab('expenses')}
               style={[styles.tabButton, activeTab === 'expenses' && styles.tabButtonActive]}
             >
-              <Text
-                style={[
-                  styles.tabButtonText,
-                  activeTab === 'expenses' && styles.tabButtonTextActive,
-                ]}
-              >
+              <Text style={[styles.tabButtonText, activeTab === 'expenses' && styles.tabButtonTextActive]}>
                 Expenses
               </Text>
             </Pressable>
@@ -1291,9 +1345,7 @@ export default function IndexScreen() {
                   <Text style={styles.listItemTitle}>{job.jobName}</Text>
                   <Text style={styles.listItemMeta}>Customer: {job.customerName || '—'}</Text>
                   <Text style={styles.listItemMeta}>Status: {job.status || '—'}</Text>
-                  {clockInJobId === job.id ? (
-                    <Text style={styles.selectedTag}>Selected for clock-in</Text>
-                  ) : null}
+                  {clockInJobId === job.id ? <Text style={styles.selectedTag}>Selected for clock-in</Text> : null}
                 </Pressable>
               ))
             )}
@@ -1343,12 +1395,7 @@ export default function IndexScreen() {
                         onPress={() => setClockInJobId(job.id)}
                         style={[styles.choiceChip, clockInJobId === job.id && styles.choiceChipActive]}
                       >
-                        <Text
-                          style={[
-                            styles.choiceChipText,
-                            clockInJobId === job.id && styles.choiceChipTextActive,
-                          ]}
-                        >
+                        <Text style={[styles.choiceChipText, clockInJobId === job.id && styles.choiceChipTextActive]}>
                           {job.jobName}
                         </Text>
                       </Pressable>
@@ -1392,12 +1439,7 @@ export default function IndexScreen() {
                           onPress={() => setClockInJobId(job.id)}
                           style={[styles.choiceChip, clockInJobId === job.id && styles.choiceChipActive]}
                         >
-                          <Text
-                            style={[
-                              styles.choiceChipText,
-                              clockInJobId === job.id && styles.choiceChipTextActive,
-                            ]}
-                          >
+                          <Text style={[styles.choiceChipText, clockInJobId === job.id && styles.choiceChipTextActive]}>
                             {job.jobName}
                           </Text>
                         </Pressable>
@@ -1425,11 +1467,7 @@ export default function IndexScreen() {
                     onPress={() => void handleClockOut()}
                     style={styles.primaryButton}
                   >
-                    {clockActionLoading ? (
-                      <ActivityIndicator color="#FFFFFF" />
-                    ) : (
-                      <Text style={styles.primaryButtonText}>Clock Out</Text>
-                    )}
+                    {clockActionLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Clock Out</Text>}
                   </Pressable>
                 </>
               ) : (
@@ -1445,11 +1483,7 @@ export default function IndexScreen() {
                     onPress={() => void handleClockIn()}
                     style={styles.primaryButton}
                   >
-                    {clockActionLoading ? (
-                      <ActivityIndicator color="#FFFFFF" />
-                    ) : (
-                      <Text style={styles.primaryButtonText}>Clock In</Text>
-                    )}
+                    {clockActionLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Clock In</Text>}
                   </Pressable>
                 </>
               )}
@@ -1491,10 +1525,25 @@ export default function IndexScreen() {
               <Text style={styles.heroMeta}>Upload a receipt, review OCR suggestions, and save the expense.</Text>
             </View>
 
+            <View style={styles.metricStrip}>
+              <View style={styles.metricStripCard}>
+                <Text style={styles.metricStripLabel}>Step 1</Text>
+                <Text style={styles.metricStripValue}>Pick</Text>
+              </View>
+              <View style={styles.metricStripCard}>
+                <Text style={styles.metricStripLabel}>Step 2</Text>
+                <Text style={styles.metricStripValue}>Upload + OCR</Text>
+              </View>
+              <View style={styles.metricStripCard}>
+                <Text style={styles.metricStripLabel}>Step 3</Text>
+                <Text style={styles.metricStripValue}>Save Expense</Text>
+              </View>
+            </View>
+
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Receipt</Text>
               <Text style={styles.cardBody}>
-                Select a receipt image first, then upload it to run OCR before saving the expense.
+                Select a receipt image, upload it, then confirm the OCR suggestions before saving.
               </Text>
 
               {expenseReceiptAsset ? (
@@ -1520,42 +1569,56 @@ export default function IndexScreen() {
                     (!expenseReceiptAsset || receiptUploading) && styles.buttonDisabled,
                   ]}
                 >
-                  {receiptUploading ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.primaryButtonText}>Upload Receipt</Text>
-                  )}
+                  {receiptUploading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Upload Receipt</Text>}
                 </Pressable>
               </View>
+            </View>
 
-              {uploadedReceipt ? (
-                <View style={styles.selectionBox}>
-                  <Text style={styles.selectionLabel}>OCR Status</Text>
-                  <Text style={styles.selectionValue}>{uploadedReceipt.status || 'Processed'}</Text>
-                  <Text style={styles.selectionHelper}>
-                    Engine: {uploadedReceipt.ocrEngine || '—'}
-                    {uploadedReceipt.errorMessage ? ` • ${uploadedReceipt.errorMessage}` : ''}
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>OCR Summary</Text>
+
+              <View style={styles.ocrStatusRow}>
+                <View style={[styles.statusPill, uploadedReceipt?.hasSuggestions ? styles.statusPillGood : styles.statusPillNeutral]}>
+                  <Text style={[styles.statusPillText, uploadedReceipt?.hasSuggestions ? styles.statusPillTextGood : styles.statusPillTextNeutral]}>
+                    {uploadedReceipt?.hasSuggestions ? 'Suggestions Found' : uploadedReceipt ? 'Uploaded' : 'Waiting'}
                   </Text>
-                  {uploadedReceipt.parsed?.merchantName ? (
-                    <Text style={styles.listItemMeta}>Merchant: {uploadedReceipt.parsed.merchantName}</Text>
-                  ) : null}
-                  {typeof uploadedReceipt.parsed?.totalAmount === 'number' ? (
-                    <Text style={styles.listItemMeta}>
-                      OCR Total: {formatCurrency(uploadedReceipt.parsed.totalAmount)}
-                    </Text>
-                  ) : null}
-                  {uploadedReceipt.parsed?.receiptDate ? (
-                    <Text style={styles.listItemMeta}>
-                      OCR Date: {uploadedReceipt.parsed.receiptDate}
-                    </Text>
-                  ) : null}
-                  {uploadedReceipt.parsed?.receiptNumber ? (
-                    <Text style={styles.listItemMeta}>
-                      Receipt #: {uploadedReceipt.parsed.receiptNumber}
-                    </Text>
-                  ) : null}
                 </View>
-              ) : null}
+
+                <View style={[styles.statusPill, styles.statusPillSecondary]}>
+                  <Text style={styles.statusPillTextNeutral}>
+                    {uploadedReceipt?.ocrEngine ? `Engine: ${uploadedReceipt.ocrEngine}` : 'Engine: —'}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.helperText}>{buildReceiptConfidenceText(uploadedReceipt)}</Text>
+
+              {uploadedReceipt?.parsed ? (
+                <View style={styles.metricGrid}>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricLabel}>Merchant</Text>
+                    <Text style={styles.metricValueSmall}>{uploadedReceipt.parsed.merchantName || '—'}</Text>
+                  </View>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricLabel}>Total</Text>
+                    <Text style={styles.metricValueSmall}>
+                      {typeof uploadedReceipt.parsed.totalAmount === 'number'
+                        ? formatCurrency(uploadedReceipt.parsed.totalAmount)
+                        : '—'}
+                    </Text>
+                  </View>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricLabel}>Date</Text>
+                    <Text style={styles.metricValueSmall}>{uploadedReceipt.parsed.receiptDate || '—'}</Text>
+                  </View>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricLabel}>Receipt #</Text>
+                    <Text style={styles.metricValueSmall}>{uploadedReceipt.parsed.receiptNumber || '—'}</Text>
+                  </View>
+                </View>
+              ) : (
+                <Text style={styles.emptyText}>Upload a receipt to see OCR suggestions.</Text>
+              )}
             </View>
 
             <View style={styles.card}>
@@ -1587,12 +1650,7 @@ export default function IndexScreen() {
                         onPress={() => setExpenseJobId(job.id)}
                         style={[styles.choiceChip, expenseJobId === job.id && styles.choiceChipActive]}
                       >
-                        <Text
-                          style={[
-                            styles.choiceChipText,
-                            expenseJobId === job.id && styles.choiceChipTextActive,
-                          ]}
-                        >
+                        <Text style={[styles.choiceChipText, expenseJobId === job.id && styles.choiceChipTextActive]}>
                           {job.jobName}
                         </Text>
                       </Pressable>
@@ -1603,10 +1661,23 @@ export default function IndexScreen() {
 
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Category</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                  {EXPENSE_CATEGORIES.map((category) => (
+                    <Pressable
+                      key={category}
+                      onPress={() => setExpenseCategory(category)}
+                      style={[styles.choiceChip, expenseCategory === category && styles.choiceChipActive]}
+                    >
+                      <Text style={[styles.choiceChipText, expenseCategory === category && styles.choiceChipTextActive]}>
+                        {category}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
                 <TextInput
                   autoCapitalize="words"
                   autoCorrect={false}
-                  placeholder="Materials, Fuel, Equipment Rental..."
+                  placeholder="Or type a custom category"
                   placeholderTextColor="#9AA5B1"
                   style={styles.input}
                   value={expenseCategory}
@@ -1615,43 +1686,76 @@ export default function IndexScreen() {
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Vendor</Text>
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>Vendor</Text>
+                  {autoFilledFields.vendor ? <Text style={styles.autoFilledBadge}>OCR Auto-Filled</Text> : null}
+                </View>
                 <TextInput
                   autoCapitalize="words"
                   autoCorrect={false}
                   placeholder="Vendor name"
                   placeholderTextColor="#9AA5B1"
-                  style={styles.input}
+                  style={[styles.input, autoFilledFields.vendor && styles.inputAutoFilled]}
                   value={expenseVendor}
-                  onChangeText={setExpenseVendor}
+                  onChangeText={(value) => {
+                    setExpenseVendor(value);
+                    if (autoFilledFields.vendor) {
+                      setAutoFilledFields((current) => ({ ...current, vendor: false }));
+                    }
+                  }}
                 />
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Amount</Text>
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>Amount</Text>
+                  {autoFilledFields.amount ? <Text style={styles.autoFilledBadge}>OCR Auto-Filled</Text> : null}
+                </View>
                 <TextInput
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardType="decimal-pad"
                   placeholder="0.00"
                   placeholderTextColor="#9AA5B1"
-                  style={styles.input}
+                  style={[styles.input, autoFilledFields.amount && styles.inputAutoFilled]}
                   value={expenseAmount}
-                  onChangeText={setExpenseAmount}
+                  onChangeText={(value) => {
+                    setExpenseAmount(value);
+                    if (autoFilledFields.amount) {
+                      setAutoFilledFields((current) => ({ ...current, amount: false }));
+                    }
+                  }}
                 />
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Date</Text>
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>Date</Text>
+                  {autoFilledFields.date ? <Text style={styles.autoFilledBadge}>OCR Auto-Filled</Text> : null}
+                </View>
                 <TextInput
                   autoCapitalize="none"
                   autoCorrect={false}
                   placeholder="YYYY-MM-DD"
                   placeholderTextColor="#9AA5B1"
-                  style={styles.input}
+                  style={[styles.input, autoFilledFields.date && styles.inputAutoFilled]}
                   value={expenseDate}
-                  onChangeText={setExpenseDate}
+                  onChangeText={(value) => {
+                    setExpenseDate(value);
+                    if (autoFilledFields.date) {
+                      setAutoFilledFields((current) => ({ ...current, date: false }));
+                    }
+                  }}
                 />
+              </View>
+
+              <View style={styles.readinessBox}>
+                <Text style={styles.selectionLabel}>Ready to Save</Text>
+                <Text style={styles.selectionHelper}>
+                  {expenseReadyToSave
+                    ? 'All required fields are ready.'
+                    : 'Required: uploaded receipt, job, category, amount, and date.'}
+                </Text>
               </View>
 
               <View style={styles.buttonRow}>
@@ -1660,15 +1764,14 @@ export default function IndexScreen() {
                 </Pressable>
 
                 <Pressable
-                  disabled={expenseSaving}
+                  disabled={expenseSaving || !expenseReadyToSave}
                   onPress={() => void handleSaveExpense()}
-                  style={[styles.primaryButtonCompact, expenseSaving && styles.buttonDisabled]}
+                  style={[
+                    styles.primaryButtonCompact,
+                    (expenseSaving || !expenseReadyToSave) && styles.buttonDisabled,
+                  ]}
                 >
-                  {expenseSaving ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.primaryButtonText}>Save Expense</Text>
-                  )}
+                  {expenseSaving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save Expense</Text>}
                 </Pressable>
               </View>
 
@@ -1764,10 +1867,21 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     gap: 6,
   },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
   label: {
     color: '#243B53',
     fontSize: 14,
     fontWeight: '700',
+  },
+  autoFilledBadge: {
+    color: '#0F766E',
+    fontSize: 12,
+    fontWeight: '800',
   },
   input: {
     backgroundColor: '#FFFFFF',
@@ -1778,6 +1892,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     color: '#102A43',
     fontSize: 15,
+  },
+  inputAutoFilled: {
+    borderColor: '#2F855A',
+    backgroundColor: '#F0FFF4',
   },
   primaryButton: {
     backgroundColor: '#1E3A5F',
@@ -1994,6 +2112,35 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
   },
+  metricValueSmall: {
+    color: '#102A43',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  metricStrip: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  metricStripCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D9E2EC',
+    borderRadius: 14,
+    padding: 12,
+    gap: 4,
+  },
+  metricStripLabel: {
+    color: '#7B8794',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  metricStripValue: {
+    color: '#102A43',
+    fontSize: 14,
+    fontWeight: '800',
+  },
   selectionBox: {
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
@@ -2056,5 +2203,46 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     resizeMode: 'contain',
     backgroundColor: '#FFFFFF',
+  },
+  ocrStatusRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+  },
+  statusPillGood: {
+    backgroundColor: '#ECFDF3',
+    borderColor: '#ABEFC6',
+  },
+  statusPillNeutral: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#D9E2EC',
+  },
+  statusPillSecondary: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#D9E2EC',
+  },
+  statusPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  statusPillTextGood: {
+    color: '#067647',
+  },
+  statusPillTextNeutral: {
+    color: '#475467',
+  },
+  readinessBox: {
+    backgroundColor: '#FFF7E6',
+    borderWidth: 1,
+    borderColor: '#F7D070',
+    borderRadius: 14,
+    padding: 14,
+    gap: 4,
   },
 });
