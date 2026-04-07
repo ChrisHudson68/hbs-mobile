@@ -1,8 +1,10 @@
+import * as ImagePicker from 'expo-image-picker';
 import * as SecureStore from 'expo-secure-store';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -152,10 +154,58 @@ type ClockOutResponse = {
   error?: string;
 };
 
-type AppTab = 'jobs' | 'timesheets';
+type UploadedReceipt = {
+  receiptFilename: string;
+  status: string | null;
+  ocrEngine: string | null;
+  errorMessage: string | null;
+  hasSuggestions: boolean;
+  parsed?: {
+    merchantName?: string;
+    totalAmount?: number;
+    subtotalAmount?: number;
+    taxAmount?: number;
+    receiptDate?: string;
+    receiptNumber?: string;
+    paymentMethodLast4?: string;
+  } | null;
+};
+
+type UploadReceiptResponse = {
+  ok: boolean;
+  receipt?: UploadedReceipt;
+  error?: string;
+};
+
+type CreateExpenseResponse = {
+  ok: boolean;
+  expense?: {
+    id: number;
+    jobId: number;
+    category: string;
+    vendor: string | null;
+    amount: number;
+    date: string;
+    receiptFilename: string | null;
+    receiptOcrStatus: string | null;
+  };
+  error?: string;
+};
+
+type ReceiptAsset = {
+  uri: string;
+  name: string;
+  mimeType: string;
+};
+
+type AppTab = 'jobs' | 'timesheets' | 'expenses';
 
 function hasPermission(user: User | null, permission: string) {
   return Array.isArray(user?.permissions) && user!.permissions.includes(permission);
+}
+
+function isManagerOrAdmin(user: User | null) {
+  return user?.role === 'Admin' || user?.role === 'Manager';
 }
 
 function formatDateTime(value: string | null | undefined) {
@@ -176,8 +226,16 @@ function formatDate(value: string | null | undefined) {
   return date.toLocaleDateString();
 }
 
+function formatDateInputValue(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
 function formatHours(hours: number | null | undefined) {
   return `${Number(hours || 0).toFixed(2)} hrs`;
+}
+
+function formatCurrency(amount: number | null | undefined) {
+  return `$${Number(amount || 0).toFixed(2)}`;
 }
 
 function formatDuration(seconds: number) {
@@ -192,7 +250,7 @@ function getWeekStart(date: Date) {
   const copy = new Date(date);
   copy.setHours(0, 0, 0, 0);
   const day = copy.getDay();
-  const diff = (day + 6) % 7; // Monday start
+  const diff = (day + 6) % 7;
   copy.setDate(copy.getDate() - diff);
   return copy;
 }
@@ -235,10 +293,7 @@ function buildTimesheetMetrics(
     clockOutAt: string | null;
   }> = [...entries];
 
-  if (
-    activeClockEntry?.id &&
-    !mergedEntries.some((entry) => entry.id === activeClockEntry.id)
-  ) {
+  if (activeClockEntry?.id && !mergedEntries.some((entry) => entry.id === activeClockEntry.id)) {
     mergedEntries.push({
       id: activeClockEntry.id,
       date: activeClockEntry.clockInAt.slice(0, 10),
@@ -306,11 +361,42 @@ function errorMessageFromCode(error?: string) {
       return 'You are not currently clocked in.';
     case 'invalid_job':
       return 'That job is no longer valid. Refresh jobs and try again.';
+    case 'job_not_found':
+      return 'That job could not be found.';
     case 'unauthorized':
       return 'Your session is no longer valid. Please sign in again.';
+    case 'receipt_required':
+      return 'Please select a receipt image first.';
     default:
       return error ? `Request failed: ${error}` : 'Something went wrong. Please try again.';
   }
+}
+
+function inferMimeTypeFromUri(uri: string) {
+  const lower = uri.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.heic')) return 'image/heic';
+  return 'image/jpeg';
+}
+
+function buildUploadFileName(uri: string) {
+  const lastSegment = uri.split('/').pop()?.trim();
+  if (lastSegment && lastSegment.includes('.')) {
+    return lastSegment;
+  }
+
+  const mime = inferMimeTypeFromUri(uri);
+  const extension =
+    mime === 'image/png'
+      ? 'png'
+      : mime === 'image/webp'
+        ? 'webp'
+        : mime === 'image/heic'
+          ? 'heic'
+          : 'jpg';
+
+  return `receipt-${Date.now()}.${extension}`;
 }
 
 export default function IndexScreen() {
@@ -325,7 +411,7 @@ export default function IndexScreen() {
   const [booting, setBooting] = useState(true);
   const [authLoading, setAuthLoading] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<AppTab>('jobs');
+  const [activeTab, setActiveTab] = useState<AppTab>('timesheets');
 
   const [jobsLoading, setJobsLoading] = useState(false);
   const [jobsRefreshing, setJobsRefreshing] = useState(false);
@@ -345,9 +431,22 @@ export default function IndexScreen() {
   const [clockInJobs, setClockInJobs] = useState<ClockInJobOption[]>([]);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
+  const [expenseSaving, setExpenseSaving] = useState(false);
+  const [receiptUploading, setReceiptUploading] = useState(false);
+  const [expenseCategory, setExpenseCategory] = useState('');
+  const [expenseVendor, setExpenseVendor] = useState('');
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseDate, setExpenseDate] = useState(formatDateInputValue(new Date()));
+  const [expenseJobId, setExpenseJobId] = useState<number | null>(null);
+  const [expenseReceiptAsset, setExpenseReceiptAsset] = useState<ReceiptAsset | null>(null);
+  const [uploadedReceipt, setUploadedReceipt] = useState<UploadedReceipt | null>(null);
+  const [lastSavedExpenseId, setLastSavedExpenseId] = useState<number | null>(null);
+
   const isAuthenticated = Boolean(token && tenantSubdomain && user);
   const canViewJobs = hasPermission(user, 'jobs.view');
   const canClockTime = hasPermission(user, 'time.clock');
+  const canManageMobileExpenses = isManagerOrAdmin(user);
+  const isEmployeeClockOnly = isAuthenticated && !canManageMobileExpenses;
 
   const selectedJobCard = useMemo(
     () => jobs.find((job) => job.id === selectedJobId) ?? null,
@@ -361,6 +460,11 @@ export default function IndexScreen() {
 
     return clockInJobs.find((job) => job.id === clockInJobId) ?? null;
   }, [canViewJobs, clockInJobId, clockInJobs, jobs]);
+
+  const selectedExpenseJob = useMemo(
+    () => jobs.find((job) => job.id === expenseJobId) ?? null,
+    [expenseJobId, jobs],
+  );
 
   const timesheetMetrics = useMemo(
     () => buildTimesheetMetrics(timesheetEntries, activeClockEntry),
@@ -379,6 +483,17 @@ export default function IndexScreen() {
     await SecureStore.deleteItemAsync(STORAGE_KEYS.user);
   }, []);
 
+  const resetExpenseForm = useCallback(() => {
+    setExpenseCategory('');
+    setExpenseVendor('');
+    setExpenseAmount('');
+    setExpenseDate(formatDateInputValue(new Date()));
+    setExpenseJobId(null);
+    setExpenseReceiptAsset(null);
+    setUploadedReceipt(null);
+    setLastSavedExpenseId(null);
+  }, []);
+
   const resetAuthenticatedState = useCallback(() => {
     setJobs([]);
     setSelectedJobId(null);
@@ -389,8 +504,9 @@ export default function IndexScreen() {
     setClockInJobId(null);
     setClockInJobs([]);
     setElapsedSeconds(0);
+    resetExpenseForm();
     setActiveTab('timesheets');
-  }, []);
+  }, [resetExpenseForm]);
 
   const handleUnauthorized = useCallback(async () => {
     await clearSession();
@@ -404,11 +520,14 @@ export default function IndexScreen() {
   const apiFetch = useCallback(
     async (path: string, options?: RequestInit) => {
       const headers = new Headers(options?.headers || {});
-      headers.set('Content-Type', 'application/json');
       headers.set('X-Tenant-Subdomain', tenantSubdomain);
 
       if (token) {
         headers.set('Authorization', `Bearer ${token}`);
+      }
+
+      if (!(options?.body instanceof FormData) && !headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json');
       }
 
       const response = await fetch(`${CONFIG.API_BASE_URL}${path}`, {
@@ -451,6 +570,10 @@ export default function IndexScreen() {
           setClockInJobId(null);
         }
 
+        if (expenseJobId && !nextJobs.some((job) => job.id === expenseJobId)) {
+          setExpenseJobId(null);
+        }
+
         if (selectedJobId && !nextJobs.some((job) => job.id === selectedJobId)) {
           setSelectedJobId(null);
           setSelectedJob(null);
@@ -467,7 +590,7 @@ export default function IndexScreen() {
         }
       }
     },
-    [apiFetch, canViewJobs, clockInJobId, isAuthenticated, selectedJobId],
+    [apiFetch, canViewJobs, clockInJobId, expenseJobId, isAuthenticated, selectedJobId],
   );
 
   const loadClockInJobs = useCallback(
@@ -669,6 +792,162 @@ export default function IndexScreen() {
     }
   }, [apiFetch, isAuthenticated, loadTimesheets]);
 
+  const handlePickReceipt = useCallback(async () => {
+    if (!canManageMobileExpenses) return;
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission Required', 'Photo library permission is required to select a receipt.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.85,
+      selectionLimit: 1,
+    });
+
+    if (result.canceled || !result.assets.length) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    const uri = asset.uri;
+    const mimeType = asset.mimeType || inferMimeTypeFromUri(uri);
+    const name = asset.fileName || buildUploadFileName(uri);
+
+    setExpenseReceiptAsset({
+      uri,
+      name,
+      mimeType,
+    });
+    setUploadedReceipt(null);
+  }, [canManageMobileExpenses]);
+
+  const handleUploadReceipt = useCallback(async () => {
+    if (!canManageMobileExpenses) return;
+    if (!expenseReceiptAsset) {
+      Alert.alert('Receipt Required', 'Pick a receipt image before uploading.');
+      return;
+    }
+
+    setReceiptUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('receipt', {
+        uri: expenseReceiptAsset.uri,
+        name: expenseReceiptAsset.name,
+        type: expenseReceiptAsset.mimeType,
+      } as unknown as Blob);
+
+      if (uploadedReceipt?.receiptFilename) {
+        formData.append('pendingReceiptFilename', uploadedReceipt.receiptFilename);
+      }
+
+      const data = (await apiFetch('/api/expenses/upload-receipt', {
+        method: 'POST',
+        body: formData,
+      })) as UploadReceiptResponse;
+
+      if (!data.receipt) {
+        throw new Error('Receipt upload did not return a saved receipt.');
+      }
+
+      setUploadedReceipt(data.receipt);
+
+      if (!expenseVendor.trim() && data.receipt.parsed?.merchantName) {
+        setExpenseVendor(data.receipt.parsed.merchantName);
+      }
+
+      if (!expenseAmount.trim() && typeof data.receipt.parsed?.totalAmount === 'number') {
+        setExpenseAmount(Number(data.receipt.parsed.totalAmount).toFixed(2));
+      }
+
+      if (!expenseDate.trim() && data.receipt.parsed?.receiptDate) {
+        setExpenseDate(data.receipt.parsed.receiptDate);
+      }
+
+      Alert.alert(
+        'Receipt Uploaded',
+        data.receipt.hasSuggestions
+          ? 'Receipt uploaded successfully. OCR suggestions were applied where available.'
+          : 'Receipt uploaded successfully.',
+      );
+    } catch (error) {
+      Alert.alert('Receipt Upload', (error as Error).message);
+    } finally {
+      setReceiptUploading(false);
+    }
+  }, [apiFetch, canManageMobileExpenses, expenseAmount, expenseDate, expenseReceiptAsset, expenseVendor, uploadedReceipt]);
+
+  const handleSaveExpense = useCallback(async () => {
+    if (!canManageMobileExpenses) return;
+
+    if (!expenseJobId) {
+      Alert.alert('Job Required', 'Select a job for this expense.');
+      return;
+    }
+
+    if (!expenseCategory.trim()) {
+      Alert.alert('Category Required', 'Enter an expense category.');
+      return;
+    }
+
+    if (!expenseAmount.trim()) {
+      Alert.alert('Amount Required', 'Enter the expense amount.');
+      return;
+    }
+
+    if (!expenseDate.trim()) {
+      Alert.alert('Date Required', 'Enter the expense date.');
+      return;
+    }
+
+    setExpenseSaving(true);
+    try {
+      const data = (await apiFetch('/api/expenses', {
+        method: 'POST',
+        body: JSON.stringify({
+          jobId: expenseJobId,
+          category: expenseCategory.trim(),
+          vendor: expenseVendor.trim() || undefined,
+          amount: expenseAmount.trim(),
+          date: expenseDate.trim(),
+          receiptFilename: uploadedReceipt?.receiptFilename,
+        }),
+      })) as CreateExpenseResponse;
+
+      if (!data.expense) {
+        throw new Error('Expense save did not return the new expense.');
+      }
+
+      setLastSavedExpenseId(data.expense.id);
+
+      Alert.alert(
+        'Expense Saved',
+        `${data.expense.category} was saved for ${selectedExpenseJob?.jobName || 'the selected job'}.`,
+      );
+
+      resetExpenseForm();
+    } catch (error) {
+      Alert.alert('Save Expense', (error as Error).message);
+    } finally {
+      setExpenseSaving(false);
+    }
+  }, [
+    apiFetch,
+    canManageMobileExpenses,
+    expenseAmount,
+    expenseCategory,
+    expenseDate,
+    expenseJobId,
+    expenseVendor,
+    resetExpenseForm,
+    selectedExpenseJob?.jobName,
+    uploadedReceipt?.receiptFilename,
+  ]);
+
   useEffect(() => {
     const bootstrap = async () => {
       try {
@@ -717,15 +996,17 @@ export default function IndexScreen() {
   }, [activeClockEntry]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+
+    if (isEmployeeClockOnly && activeTab !== 'timesheets') {
+      setActiveTab('timesheets');
+    }
+  }, [activeTab, isAuthenticated, isEmployeeClockOnly]);
+
+  useEffect(() => {
     if (!isAuthenticated || !canViewJobs) return;
     void loadJobs();
   }, [canViewJobs, isAuthenticated, loadJobs]);
-
-  useEffect(() => {
-    if (!canViewJobs && activeTab === 'jobs') {
-      setActiveTab('timesheets');
-    }
-  }, [activeTab, canViewJobs]);
 
   useEffect(() => {
     if (!isAuthenticated || activeTab !== 'timesheets' || canViewJobs || !canClockTime) return;
@@ -769,7 +1050,7 @@ export default function IndexScreen() {
                   setTenantInput(value);
                   setTenantSubdomain('');
                 }}
-                placeholder="taylors"
+                placeholder="taylorsreno"
                 placeholderTextColor="#9AA5B1"
                 style={styles.input}
                 value={tenantInput}
@@ -824,7 +1105,7 @@ export default function IndexScreen() {
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.screenContent}>
           <Pressable onPress={() => setSelectedJob(null)} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>{canViewJobs ? 'Back to Jobs' : 'Back'}</Text>
+            <Text style={styles.secondaryButtonText}>Back to Jobs</Text>
           </Pressable>
 
           {jobDetailLoading ? (
@@ -861,32 +1142,32 @@ export default function IndexScreen() {
                 </Pressable>
               </View>
 
-              {canViewJobs && selectedJob.financials ? (
+              {selectedJob.financials ? (
                 <View style={styles.card}>
                   <Text style={styles.cardTitle}>Financials</Text>
                   <View style={styles.metricGrid}>
                     <View style={styles.metricCard}>
                       <Text style={styles.metricLabel}>Income</Text>
                       <Text style={styles.metricValue}>
-                        ${Number(selectedJob.financials?.totalIncome || 0).toFixed(2)}
+                        ${Number(selectedJob.financials.totalIncome || 0).toFixed(2)}
                       </Text>
                     </View>
                     <View style={styles.metricCard}>
                       <Text style={styles.metricLabel}>Expenses</Text>
                       <Text style={styles.metricValue}>
-                        ${Number(selectedJob.financials?.totalExpenses || 0).toFixed(2)}
+                        ${Number(selectedJob.financials.totalExpenses || 0).toFixed(2)}
                       </Text>
                     </View>
                     <View style={styles.metricCard}>
                       <Text style={styles.metricLabel}>Labor</Text>
                       <Text style={styles.metricValue}>
-                        ${Number(selectedJob.financials?.totalLabor || 0).toFixed(2)}
+                        ${Number(selectedJob.financials.totalLabor || 0).toFixed(2)}
                       </Text>
                     </View>
                     <View style={styles.metricCard}>
                       <Text style={styles.metricLabel}>Profit</Text>
                       <Text style={styles.metricValue}>
-                        ${Number(selectedJob.financials?.profit || 0).toFixed(2)}
+                        ${Number(selectedJob.financials.profit || 0).toFixed(2)}
                       </Text>
                     </View>
                   </View>
@@ -905,9 +1186,17 @@ export default function IndexScreen() {
         contentContainerStyle={styles.screenContent}
         refreshControl={
           <RefreshControl
-            refreshing={activeTab === 'jobs' ? jobsRefreshing : timesheetsRefreshing}
+            refreshing={
+              activeTab === 'jobs'
+                ? jobsRefreshing
+                : activeTab === 'expenses'
+                  ? jobsRefreshing
+                  : timesheetsRefreshing
+            }
             onRefresh={() => {
               if (activeTab === 'jobs') {
+                void loadJobs(true);
+              } else if (activeTab === 'expenses') {
                 void loadJobs(true);
               } else {
                 void loadTimesheets(true);
@@ -923,15 +1212,26 @@ export default function IndexScreen() {
           <View style={styles.headerCopy}>
             <Text style={styles.brandEyebrow}>{tenantSubdomain}</Text>
             <Text style={styles.screenTitle}>Welcome, {user?.name}</Text>
-            <Text style={styles.screenSubtitle}>{user?.role}</Text>
+            <Text style={styles.screenSubtitle}>
+              {isEmployeeClockOnly ? 'Clock in / out only' : user?.role}
+            </Text>
           </View>
           <Pressable onPress={() => void handleLogout()} style={styles.logoutButton}>
             <Text style={styles.logoutButtonText}>Log Out</Text>
           </Pressable>
         </View>
 
+        {isEmployeeClockOnly ? (
+          <View style={styles.restrictedBanner}>
+            <Text style={styles.restrictedBannerTitle}>Employee Mobile Access</Text>
+            <Text style={styles.restrictedBannerBody}>
+              This mobile app is limited to clock in, clock out, and viewing your recent time entries.
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.tabBar}>
-          {canViewJobs ? (
+          {!isEmployeeClockOnly && canViewJobs ? (
             <Pressable
               onPress={() => setActiveTab('jobs')}
               style={[styles.tabButton, activeTab === 'jobs' && styles.tabButtonActive]}
@@ -941,6 +1241,7 @@ export default function IndexScreen() {
               </Text>
             </Pressable>
           ) : null}
+
           <Pressable
             onPress={() => setActiveTab('timesheets')}
             style={[styles.tabButton, activeTab === 'timesheets' && styles.tabButtonActive]}
@@ -954,9 +1255,25 @@ export default function IndexScreen() {
               Timesheets
             </Text>
           </Pressable>
+
+          {!isEmployeeClockOnly && canManageMobileExpenses ? (
+            <Pressable
+              onPress={() => setActiveTab('expenses')}
+              style={[styles.tabButton, activeTab === 'expenses' && styles.tabButtonActive]}
+            >
+              <Text
+                style={[
+                  styles.tabButtonText,
+                  activeTab === 'expenses' && styles.tabButtonTextActive,
+                ]}
+              >
+                Expenses
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
 
-        {activeTab === 'jobs' ? (
+        {activeTab === 'jobs' && !isEmployeeClockOnly ? (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Jobs</Text>
             <Text style={styles.helperText}>
@@ -981,24 +1298,20 @@ export default function IndexScreen() {
               ))
             )}
           </View>
-        ) : (
+        ) : null}
+
+        {activeTab === 'timesheets' ? (
           <>
             <View style={styles.heroCard}>
               <Text style={styles.heroTitle}>Timesheets</Text>
-              <Text style={styles.heroMeta}>
-                Week total: {formatHours(timesheetMetrics.weekHours)}
-              </Text>
-              <Text style={styles.heroMeta}>
-                Today: {formatHours(timesheetMetrics.todayHours)}
-              </Text>
-              <Text style={styles.heroMeta}>
-                Entries: {timesheetSummary?.entryCount ?? 0}
-              </Text>
+              <Text style={styles.heroMeta}>Week total: {formatHours(timesheetMetrics.weekHours)}</Text>
+              <Text style={styles.heroMeta}>Today: {formatHours(timesheetMetrics.todayHours)}</Text>
+              <Text style={styles.heroMeta}>Entries: {timesheetSummary?.entryCount ?? 0}</Text>
             </View>
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Clock In Job</Text>
-              {canViewJobs ? (
+              {canViewJobs && !isEmployeeClockOnly ? (
                 <>
                   <Text style={styles.cardBody}>
                     Pick a job before clocking in, or use general time if you are not tied to one job.
@@ -1144,7 +1457,7 @@ export default function IndexScreen() {
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Recent Entries</Text>
-              {canViewJobs && selectedJobCard ? (
+              {canViewJobs && selectedJobCard && !isEmployeeClockOnly ? (
                 <Text style={styles.helperText}>Selected from Jobs: {selectedJobCard.jobName}</Text>
               ) : null}
               {timesheetsLoading ? (
@@ -1159,12 +1472,8 @@ export default function IndexScreen() {
                     <Text style={styles.listItemTitle}>{formatDate(entry.date)}</Text>
                     <Text style={styles.listItemMeta}>Job: {entry.jobName || 'General time'}</Text>
                     <Text style={styles.listItemMeta}>Hours: {formatHours(entry.hours)}</Text>
-                    <Text style={styles.listItemMeta}>
-                      Clock In: {formatDateTime(entry.clockInAt)}
-                    </Text>
-                    <Text style={styles.listItemMeta}>
-                      Clock Out: {formatDateTime(entry.clockOutAt)}
-                    </Text>
+                    <Text style={styles.listItemMeta}>Clock In: {formatDateTime(entry.clockInAt)}</Text>
+                    <Text style={styles.listItemMeta}>Clock Out: {formatDateTime(entry.clockOutAt)}</Text>
                     <Text style={styles.listItemMeta}>Status: {entry.approvalStatus || '—'}</Text>
                     {entry.note ? <Text style={styles.listItemMeta}>Note: {entry.note}</Text> : null}
                   </View>
@@ -1172,7 +1481,203 @@ export default function IndexScreen() {
               )}
             </View>
           </>
-        )}
+        ) : null}
+
+        {activeTab === 'expenses' && !isEmployeeClockOnly && canManageMobileExpenses ? (
+          <>
+            <View style={styles.heroCard}>
+              <Text style={styles.heroTitle}>Expenses</Text>
+              <Text style={styles.heroMeta}>Managers and admins only</Text>
+              <Text style={styles.heroMeta}>Upload a receipt, review OCR suggestions, and save the expense.</Text>
+            </View>
+
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Receipt</Text>
+              <Text style={styles.cardBody}>
+                Select a receipt image first, then upload it to run OCR before saving the expense.
+              </Text>
+
+              {expenseReceiptAsset ? (
+                <View style={styles.receiptPreviewCard}>
+                  <Image source={{ uri: expenseReceiptAsset.uri }} style={styles.receiptPreviewImage} />
+                  <Text style={styles.selectionValue}>{expenseReceiptAsset.name}</Text>
+                  <Text style={styles.selectionHelper}>{expenseReceiptAsset.mimeType}</Text>
+                </View>
+              ) : (
+                <Text style={styles.emptyText}>No receipt selected yet.</Text>
+              )}
+
+              <View style={styles.buttonRow}>
+                <Pressable onPress={() => void handlePickReceipt()} style={styles.secondaryActionButton}>
+                  <Text style={styles.secondaryActionButtonText}>Pick Receipt</Text>
+                </Pressable>
+
+                <Pressable
+                  disabled={receiptUploading || !expenseReceiptAsset}
+                  onPress={() => void handleUploadReceipt()}
+                  style={[
+                    styles.primaryButtonCompact,
+                    (!expenseReceiptAsset || receiptUploading) && styles.buttonDisabled,
+                  ]}
+                >
+                  {receiptUploading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>Upload Receipt</Text>
+                  )}
+                </Pressable>
+              </View>
+
+              {uploadedReceipt ? (
+                <View style={styles.selectionBox}>
+                  <Text style={styles.selectionLabel}>OCR Status</Text>
+                  <Text style={styles.selectionValue}>{uploadedReceipt.status || 'Processed'}</Text>
+                  <Text style={styles.selectionHelper}>
+                    Engine: {uploadedReceipt.ocrEngine || '—'}
+                    {uploadedReceipt.errorMessage ? ` • ${uploadedReceipt.errorMessage}` : ''}
+                  </Text>
+                  {uploadedReceipt.parsed?.merchantName ? (
+                    <Text style={styles.listItemMeta}>Merchant: {uploadedReceipt.parsed.merchantName}</Text>
+                  ) : null}
+                  {typeof uploadedReceipt.parsed?.totalAmount === 'number' ? (
+                    <Text style={styles.listItemMeta}>
+                      OCR Total: {formatCurrency(uploadedReceipt.parsed.totalAmount)}
+                    </Text>
+                  ) : null}
+                  {uploadedReceipt.parsed?.receiptDate ? (
+                    <Text style={styles.listItemMeta}>
+                      OCR Date: {uploadedReceipt.parsed.receiptDate}
+                    </Text>
+                  ) : null}
+                  {uploadedReceipt.parsed?.receiptNumber ? (
+                    <Text style={styles.listItemMeta}>
+                      Receipt #: {uploadedReceipt.parsed.receiptNumber}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Expense Details</Text>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Job</Text>
+                <View style={styles.selectionBox}>
+                  <Text style={styles.selectionLabel}>Current selection</Text>
+                  <Text style={styles.selectionValue}>
+                    {selectedExpenseJob ? selectedExpenseJob.jobName : 'No job selected'}
+                  </Text>
+                  <Text style={styles.selectionHelper}>
+                    {selectedExpenseJob?.customerName
+                      ? `Customer: ${selectedExpenseJob.customerName}`
+                      : 'Select the job this expense belongs to.'}
+                  </Text>
+                </View>
+
+                {jobsLoading ? (
+                  <View style={styles.centeredStateCompact}>
+                    <ActivityIndicator size="small" color="#1E3A5F" />
+                  </View>
+                ) : (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                    {jobs.map((job) => (
+                      <Pressable
+                        key={job.id}
+                        onPress={() => setExpenseJobId(job.id)}
+                        style={[styles.choiceChip, expenseJobId === job.id && styles.choiceChipActive]}
+                      >
+                        <Text
+                          style={[
+                            styles.choiceChipText,
+                            expenseJobId === job.id && styles.choiceChipTextActive,
+                          ]}
+                        >
+                          {job.jobName}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Category</Text>
+                <TextInput
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  placeholder="Materials, Fuel, Equipment Rental..."
+                  placeholderTextColor="#9AA5B1"
+                  style={styles.input}
+                  value={expenseCategory}
+                  onChangeText={setExpenseCategory}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Vendor</Text>
+                <TextInput
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  placeholder="Vendor name"
+                  placeholderTextColor="#9AA5B1"
+                  style={styles.input}
+                  value={expenseVendor}
+                  onChangeText={setExpenseVendor}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Amount</Text>
+                <TextInput
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  placeholderTextColor="#9AA5B1"
+                  style={styles.input}
+                  value={expenseAmount}
+                  onChangeText={setExpenseAmount}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Date</Text>
+                <TextInput
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor="#9AA5B1"
+                  style={styles.input}
+                  value={expenseDate}
+                  onChangeText={setExpenseDate}
+                />
+              </View>
+
+              <View style={styles.buttonRow}>
+                <Pressable onPress={resetExpenseForm} style={styles.secondaryActionButton}>
+                  <Text style={styles.secondaryActionButtonText}>Reset Form</Text>
+                </Pressable>
+
+                <Pressable
+                  disabled={expenseSaving}
+                  onPress={() => void handleSaveExpense()}
+                  style={[styles.primaryButtonCompact, expenseSaving && styles.buttonDisabled]}
+                >
+                  {expenseSaving ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>Save Expense</Text>
+                  )}
+                </Pressable>
+              </View>
+
+              {lastSavedExpenseId ? (
+                <Text style={styles.helperText}>Last saved expense ID: #{lastSavedExpenseId}</Text>
+              ) : null}
+            </View>
+          </>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -1216,6 +1721,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D9E2EC',
     gap: 10,
+  },
+  restrictedBanner: {
+    backgroundColor: '#FFF7E6',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#F7D070',
+    gap: 6,
+  },
+  restrictedBannerTitle: {
+    color: '#7C5A03',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  restrictedBannerBody: {
+    color: '#8D6E08',
+    fontSize: 14,
+    lineHeight: 20,
   },
   brandEyebrow: {
     color: '#F59E0B',
@@ -1264,6 +1787,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 8,
   },
+  primaryButtonCompact: {
+    backgroundColor: '#1E3A5F',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 132,
+  },
   primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
@@ -1282,6 +1814,31 @@ const styles = StyleSheet.create({
     color: '#1E3A5F',
     fontSize: 14,
     fontWeight: '700',
+  },
+  secondaryActionButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BCCCDC',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 132,
+  },
+  secondaryActionButtonText: {
+    color: '#1E3A5F',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  buttonDisabled: {
+    opacity: 0.65,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 6,
   },
   helperText: {
     color: '#7B8794',
@@ -1347,6 +1904,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#EAF1F7',
     borderRadius: 14,
     padding: 4,
+    gap: 4,
   },
   tabButton: {
     flex: 1,
@@ -1483,5 +2041,20 @@ const styles = StyleSheet.create({
   },
   choiceChipTextActive: {
     color: '#FFFFFF',
+  },
+  receiptPreviewCard: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E4E7EC',
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
+  },
+  receiptPreviewImage: {
+    width: '100%',
+    height: 220,
+    borderRadius: 12,
+    resizeMode: 'contain',
+    backgroundColor: '#FFFFFF',
   },
 });
