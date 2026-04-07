@@ -11,7 +11,8 @@ import {
     Text,
     View,
 } from 'react-native';
-import { CONFIG, STORAGE_KEYS } from './constants';
+import { createApiClient, mobileLogin, mobileLogout } from './api/client';
+import { STORAGE_KEYS } from './constants';
 import AuthScreen from './screens/AuthScreen';
 import DashboardTab from './screens/DashboardTab';
 import ExpensesTab from './screens/ExpensesTab';
@@ -24,29 +25,22 @@ import {
     AutoFilledFieldState,
     ClockInJobsResponse,
     ClockOutResponse,
-    CreateExpenseResponse,
-    JobDetailResponse,
     JobListItem,
     JobsResponse,
-    LoginResponse,
     ReceiptAsset,
     TimesheetEntry,
     TimesheetsResponse,
-    UploadReceiptResponse,
     UploadedReceipt,
     User,
 } from './types';
 import {
     buildDashboardMetrics,
-    buildTimesheetMetrics,
     buildUploadFileName,
-    errorMessageFromCode,
     formatDateInputValue,
     formatHours,
     hasPermission,
     inferMimeTypeFromUri,
     isManagerOrAdmin,
-    parseJsonResponse
 } from './utils';
 
 export default function AppShell() {
@@ -121,8 +115,28 @@ export default function AppShell() {
     [expenseJobId, jobs],
   );
 
+  const api = useMemo(
+    () =>
+      createApiClient({
+        tenantSubdomain,
+        token,
+        onUnauthorized: async () => {
+          await clearSession();
+          setToken('');
+          setUser(null);
+          setTenantSubdomain('');
+          resetAuthenticatedState();
+          Alert.alert('Session expired', 'Please sign in again.');
+        },
+      }),
+    [tenantSubdomain, token],
+  );
+
   const timesheetMetrics = useMemo(
-    () => buildTimesheetMetrics(timesheetEntries, activeClockEntry),
+    () => {
+      const { buildTimesheetMetrics } = require('./utils');
+      return buildTimesheetMetrics(timesheetEntries, activeClockEntry);
+    },
     [timesheetEntries, activeClockEntry],
   );
 
@@ -207,49 +221,6 @@ export default function AppShell() {
     setActiveTab('timesheets');
   }, [resetExpenseForm]);
 
-  const handleUnauthorized = useCallback(async () => {
-    await clearSession();
-    setToken('');
-    setUser(null);
-    setTenantSubdomain('');
-    resetAuthenticatedState();
-    Alert.alert('Session expired', 'Please sign in again.');
-  }, [clearSession, resetAuthenticatedState]);
-
-  const apiFetch = useCallback(
-    async (path: string, options?: RequestInit) => {
-      const headers = new Headers(options?.headers || {});
-      headers.set('X-Tenant-Subdomain', tenantSubdomain);
-
-      if (token) {
-        headers.set('Authorization', `Bearer ${token}`);
-      }
-
-      if (!(options?.body instanceof FormData) && !headers.has('Content-Type')) {
-        headers.set('Content-Type', 'application/json');
-      }
-
-      const response = await fetch(`${CONFIG.API_BASE_URL}${path}`, {
-        ...options,
-        headers,
-      });
-
-      const data = await parseJsonResponse(response);
-
-      if (response.status === 401 || data?.error === 'unauthorized') {
-        await handleUnauthorized();
-        throw new Error('unauthorized');
-      }
-
-      if (!response.ok || data?.ok === false) {
-        throw new Error(errorMessageFromCode(data?.error));
-      }
-
-      return data;
-    },
-    [handleUnauthorized, tenantSubdomain, token],
-  );
-
   const loadJobs = useCallback(
     async (isRefresh = false) => {
       if (!isAuthenticated || !canViewJobs) return;
@@ -261,7 +232,7 @@ export default function AppShell() {
       }
 
       try {
-        const data = (await apiFetch('/api/jobs')) as JobsResponse;
+        const data = (await api.getJobs()) as JobsResponse;
         const nextJobs = Array.isArray(data.jobs) ? data.jobs : [];
         setJobs(nextJobs);
 
@@ -289,7 +260,7 @@ export default function AppShell() {
         }
       }
     },
-    [apiFetch, canViewJobs, clockInJobId, expenseJobId, isAuthenticated, selectedJobId],
+    [api, canViewJobs, clockInJobId, expenseJobId, isAuthenticated, selectedJobId],
   );
 
   const loadClockInJobs = useCallback(
@@ -301,7 +272,7 @@ export default function AppShell() {
       }
 
       try {
-        const data = (await apiFetch('/api/timesheets/clock-in-jobs')) as ClockInJobsResponse;
+        const data = (await api.getClockInJobs()) as ClockInJobsResponse;
         const nextJobs = Array.isArray(data.jobs) ? data.jobs : [];
         setClockInJobs(nextJobs);
 
@@ -318,7 +289,7 @@ export default function AppShell() {
         }
       }
     },
-    [apiFetch, canClockTime, canViewJobs, clockInJobId, isAuthenticated],
+    [api, canClockTime, canViewJobs, clockInJobId, isAuthenticated],
   );
 
   const loadJobDetail = useCallback(
@@ -327,7 +298,7 @@ export default function AppShell() {
 
       setJobDetailLoading(true);
       try {
-        const data = (await apiFetch(`/api/jobs/${jobId}`)) as JobDetailResponse;
+        const data = await api.getJobDetail(jobId);
         setSelectedJob(data.job ?? null);
         setSelectedJobId(jobId);
       } catch (error) {
@@ -338,7 +309,7 @@ export default function AppShell() {
         setJobDetailLoading(false);
       }
     },
-    [apiFetch, canViewJobs, isAuthenticated],
+    [api, canViewJobs, isAuthenticated],
   );
 
   const loadTimesheets = useCallback(
@@ -352,7 +323,7 @@ export default function AppShell() {
       }
 
       try {
-        const data = (await apiFetch('/api/timesheets')) as TimesheetsResponse;
+        const data = await api.getTimesheets();
         setTimesheetSummary(data.summary ?? null);
         setActiveClockEntry(data.activeClockEntry ?? null);
         setTimesheetEntries(Array.isArray(data.timesheets) ? data.timesheets : []);
@@ -368,7 +339,7 @@ export default function AppShell() {
         }
       }
     },
-    [apiFetch, isAuthenticated],
+    [api, isAuthenticated],
   );
 
   const handleLogin = useCallback(async () => {
@@ -387,22 +358,12 @@ export default function AppShell() {
 
     setAuthLoading(true);
     try {
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/mobile/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Tenant-Subdomain': cleanedTenant,
-        },
-        body: JSON.stringify({ email: cleanedEmail, password }),
+      const payload = await mobileLogin({
+        tenantSubdomain: cleanedTenant,
+        email: cleanedEmail,
+        password,
       });
 
-      const data = await parseJsonResponse(response);
-
-      if (!response.ok || !data?.ok) {
-        throw new Error(errorMessageFromCode(data?.error));
-      }
-
-      const payload = data as LoginResponse;
       setTenantSubdomain(cleanedTenant);
       setTenantInput(cleanedTenant);
       setToken(payload.token);
@@ -420,13 +381,9 @@ export default function AppShell() {
   const handleLogout = useCallback(async () => {
     try {
       if (tenantSubdomain && token) {
-        await fetch(`${CONFIG.API_BASE_URL}/api/mobile/logout`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Tenant-Subdomain': tenantSubdomain,
-            Authorization: `Bearer ${token}`,
-          },
+        await mobileLogout({
+          tenantSubdomain,
+          token,
         });
       }
     } catch {
@@ -446,11 +403,8 @@ export default function AppShell() {
 
     setClockActionLoading(true);
     try {
-      await apiFetch('/api/timesheets/clock-in', {
-        method: 'POST',
-        body: JSON.stringify({
-          jobId: clockInJobId ?? undefined,
-        }),
+      await api.clockIn({
+        jobId: clockInJobId ?? undefined,
       });
       await loadTimesheets();
       Alert.alert(
@@ -466,17 +420,14 @@ export default function AppShell() {
     } finally {
       setClockActionLoading(false);
     }
-  }, [apiFetch, clockInJobId, isAuthenticated, loadTimesheets, selectedClockInJob]);
+  }, [api, clockInJobId, isAuthenticated, loadTimesheets, selectedClockInJob]);
 
   const handleClockOut = useCallback(async () => {
     if (!isAuthenticated) return;
 
     setClockActionLoading(true);
     try {
-      const data = (await apiFetch('/api/timesheets/clock-out', {
-        method: 'POST',
-        body: JSON.stringify({}),
-      })) as ClockOutResponse;
+      const data = (await api.clockOut()) as ClockOutResponse;
       await loadTimesheets();
       Alert.alert(
         'Clocked Out',
@@ -489,7 +440,7 @@ export default function AppShell() {
     } finally {
       setClockActionLoading(false);
     }
-  }, [apiFetch, isAuthenticated, loadTimesheets]);
+  }, [api, isAuthenticated, loadTimesheets]);
 
   const handlePickReceipt = useCallback(async () => {
     if (!canManageMobileExpenses) return;
@@ -548,10 +499,7 @@ export default function AppShell() {
         formData.append('pendingReceiptFilename', uploadedReceipt.receiptFilename);
       }
 
-      const data = (await apiFetch('/api/expenses/upload-receipt', {
-        method: 'POST',
-        body: formData,
-      })) as UploadReceiptResponse;
+      const data = await api.uploadReceipt(formData);
 
       if (!data.receipt) {
         throw new Error('Receipt upload did not return a saved receipt.');
@@ -595,7 +543,7 @@ export default function AppShell() {
       setReceiptUploading(false);
     }
   }, [
-    apiFetch,
+    api,
     canManageMobileExpenses,
     expenseAmount,
     expenseDate,
@@ -634,17 +582,14 @@ export default function AppShell() {
 
     setExpenseSaving(true);
     try {
-      const data = (await apiFetch('/api/expenses', {
-        method: 'POST',
-        body: JSON.stringify({
-          jobId: expenseJobId,
-          category: expenseCategory.trim(),
-          vendor: expenseVendor.trim() || undefined,
-          amount: expenseAmount.trim(),
-          date: expenseDate.trim(),
-          receiptFilename: uploadedReceipt.receiptFilename,
-        }),
-      })) as CreateExpenseResponse;
+      const data = await api.createExpense({
+        jobId: expenseJobId,
+        category: expenseCategory.trim(),
+        vendor: expenseVendor.trim() || undefined,
+        amount: expenseAmount.trim(),
+        date: expenseDate.trim(),
+        receiptFilename: uploadedReceipt.receiptFilename,
+      });
 
       if (!data.expense) {
         throw new Error('Expense save did not return the new expense.');
@@ -664,7 +609,7 @@ export default function AppShell() {
       setExpenseSaving(false);
     }
   }, [
-    apiFetch,
+    api,
     canManageMobileExpenses,
     expenseAmount,
     expenseCategory,
