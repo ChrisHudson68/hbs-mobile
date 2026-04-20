@@ -1,12 +1,23 @@
 import { CONFIG } from '../constants';
 import {
+    AddIncomeArgs,
     ClockInJobsResponse,
     ClockOutResponse,
     CreateExpenseResponse,
+    CreateInvoiceArgs,
+    CreateJobArgs,
+    Employee,
+    Invoice,
+    InvoiceDetail,
+    InvoicePayment,
     JobDetailResponse,
+    JobIncome,
     JobsResponse,
     LoginResponse,
+    ManualTimeEntryArgs,
+    RecordPaymentArgs,
     TimesheetsResponse,
+    UpdateJobArgs,
     UploadReceiptResponse,
 } from '../types';
 import { errorMessageFromCode, parseJsonResponse } from '../utils';
@@ -24,7 +35,7 @@ type LoginArgs = {
 };
 
 type ClockInArgs = {
-  jobId?: number;
+  jobId: number;
 };
 
 type CreateExpenseArgs = {
@@ -213,6 +224,70 @@ export function createApiClient({
           receiptFilename: args.receiptFilename,
         }),
       });
+    },
+
+    createJob(args: CreateJobArgs) {
+      return request<{ ok: boolean; jobId: number }>('/api/jobs', {
+        method: 'POST',
+        body: JSON.stringify(args),
+      });
+    },
+
+    updateJob(jobId: number, args: UpdateJobArgs) {
+      return request<{ ok: boolean }>(`/api/jobs/${jobId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(args),
+      });
+    },
+
+    getJobIncome(jobId: number) {
+      return request<{ ok: boolean; income: JobIncome[] }>(`/api/jobs/${jobId}/income`);
+    },
+
+    addJobIncome(jobId: number, args: AddIncomeArgs) {
+      return request<{ ok: boolean; income: JobIncome }>(`/api/jobs/${jobId}/income`, {
+        method: 'POST',
+        body: JSON.stringify(args),
+      });
+    },
+
+    deleteJobIncome(jobId: number, incomeId: number) {
+      return request<{ ok: boolean }>(`/api/jobs/${jobId}/income/${incomeId}`, {
+        method: 'DELETE',
+      });
+    },
+
+    addManualTimeEntry(args: ManualTimeEntryArgs) {
+      return request<{ ok: boolean; entry: { id: number } }>('/api/timesheets/manual', {
+        method: 'POST',
+        body: JSON.stringify(args),
+      });
+    },
+
+    getInvoices() {
+      return request<{ ok: boolean; invoices: Invoice[] }>('/api/invoices');
+    },
+
+    getInvoice(invoiceId: number) {
+      return request<{ ok: boolean; invoice: InvoiceDetail }>(`/api/invoices/${invoiceId}`);
+    },
+
+    createInvoice(args: CreateInvoiceArgs) {
+      return request<{ ok: boolean; invoice: Invoice }>('/api/invoices', {
+        method: 'POST',
+        body: JSON.stringify(args),
+      });
+    },
+
+    recordPayment(invoiceId: number, args: RecordPaymentArgs) {
+      return request<{ ok: boolean; payment: InvoicePayment }>(`/api/invoices/${invoiceId}/payments`, {
+        method: 'POST',
+        body: JSON.stringify(args),
+      });
+    },
+
+    getEmployees() {
+      return request<{ ok: boolean; employees: Employee[] }>('/api/employees');
     },
   };
 }

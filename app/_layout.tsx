@@ -1,24 +1,42 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+import { useEffect } from 'react';
+import { AuthProvider, useAuth } from '../src/mobile/context/AuthContext';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+function RootRedirect() {
+  const { isAuthenticated, isLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
 
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+  useEffect(() => {
+    if (isLoading) return;
+    const inAuthGroup = segments[0] === 'login';
+    if (!isAuthenticated && !inAuthGroup) {
+      router.replace('/login');
+    } else if (isAuthenticated && inAuthGroup) {
+      router.replace('/(tabs)');
+    }
+  }, [isAuthenticated, isLoading, segments, router]);
+
+  return null;
+}
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <AuthProvider>
+      <RootRedirect />
       <Stack>
+        <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        <Stack.Screen name="jobs/new" options={{ title: 'New Job', headerBackTitle: 'Jobs' }} />
+        <Stack.Screen name="jobs/[id]" options={{ title: 'Job Details', headerBackTitle: 'Jobs' }} />
+        <Stack.Screen name="timesheets/manual" options={{ title: 'Add Time Entry', headerBackTitle: 'Timesheets' }} />
+        <Stack.Screen name="invoices/new" options={{ title: 'New Invoice', headerBackTitle: 'Invoices' }} />
+        <Stack.Screen name="invoices/[id]" options={{ title: 'Invoice', headerBackTitle: 'Invoices' }} />
+        <Stack.Screen name="employees/index" options={{ title: 'Employees', headerBackTitle: 'More' }} />
+        <Stack.Screen name="expenses/new" options={{ title: 'New Expense', headerBackTitle: 'More' }} />
       </Stack>
       <StatusBar style="auto" />
-    </ThemeProvider>
+    </AuthProvider>
   );
 }
