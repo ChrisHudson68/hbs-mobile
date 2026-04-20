@@ -26,6 +26,7 @@ export type JobListItem = {
   jobName: string;
   customerName: string | null;
   status: string | null;
+  isOverhead?: boolean;
   description?: string | null;
   sourceEstimateId?: number | null;
   sourceEstimateCustomerName?: string | null;
@@ -62,6 +63,7 @@ export type ClockInJobOption = {
   jobCode: string | null;
   clientName: string | null;
   status: string | null;
+  isOverhead: boolean;
 };
 
 export type ClockInJobsResponse = {
@@ -197,3 +199,90 @@ export type DashboardMetrics = {
 };
 
 export type AppTab = 'dashboard' | 'jobs' | 'timesheets' | 'expenses';
+
+export type Invoice = {
+  id: number;
+  jobId: number;
+  jobName: string | null;
+  clientName: string | null;
+  invoiceNumber: string | null;
+  dateIssued: string;
+  dueDate: string;
+  amount: number;
+  status: string;
+  notes: string | null;
+  totalPaid: number;
+  balance: number;
+};
+
+export type InvoicePayment = {
+  id: number;
+  date: string;
+  amount: number;
+  method: string | null;
+  reference: string | null;
+};
+
+export type InvoiceDetail = Invoice & {
+  payments: InvoicePayment[];
+};
+
+export type Employee = {
+  id: number;
+  name: string;
+  payType: string;
+  hourlyRate: number | null;
+  annualSalary: number | null;
+  active: number;
+};
+
+export type JobIncome = {
+  id: number;
+  jobId: number;
+  amount: number;
+  date: string;
+  description: string | null;
+};
+
+export type CreateJobArgs = {
+  jobName: string;
+  jobCode?: string;
+  clientName?: string;
+  soldBy?: string;
+  contractAmount?: number;
+  startDate?: string;
+  status?: string;
+  isOverhead?: boolean;
+  jobDescription?: string;
+};
+
+export type UpdateJobArgs = Partial<CreateJobArgs>;
+
+export type CreateInvoiceArgs = {
+  jobId: number;
+  dateIssued: string;
+  dueDate: string;
+  amount: number;
+  notes?: string;
+};
+
+export type RecordPaymentArgs = {
+  date: string;
+  amount: number;
+  method?: string;
+  reference?: string;
+};
+
+export type ManualTimeEntryArgs = {
+  employeeId?: number;
+  jobId: number;
+  date: string;
+  hours: number;
+  note?: string;
+};
+
+export type AddIncomeArgs = {
+  amount: number;
+  date: string;
+  description?: string;
+};

@@ -401,17 +401,18 @@ export default function AppShell() {
   const handleClockIn = useCallback(async () => {
     if (!isAuthenticated) return;
 
+    if (!clockInJobId) {
+      Alert.alert('Job Required', 'Select a job before clocking in.');
+      return;
+    }
+
     setClockActionLoading(true);
     try {
-      await api.clockIn({
-        jobId: clockInJobId ?? undefined,
-      });
+      await api.clockIn({ jobId: clockInJobId });
       await loadTimesheets();
       Alert.alert(
         'Clocked In',
-        selectedClockInJob
-          ? `Your time entry has started on ${selectedClockInJob.jobName}.`
-          : 'Your time entry has started as general time.',
+        `Your time entry has started on ${selectedClockInJob?.jobName ?? 'the selected job'}.`,
       );
     } catch (error) {
       if ((error as Error).message !== 'unauthorized') {
