@@ -11,8 +11,10 @@ import {
     InvoiceDetail,
     InvoicePayment,
     JobDetailResponse,
+    JobExpense,
     JobIncome,
     JobsResponse,
+    JobTimeEntry,
     LoginResponse,
     ManualTimeEntryArgs,
     RecordPaymentArgs,
@@ -288,6 +290,14 @@ export function createApiClient({
 
     getEmployees() {
       return request<{ ok: boolean; employees: Employee[] }>('/api/employees');
+    },
+
+    getJobExpenses(jobId: number) {
+      return request<{ ok: boolean; expenses: JobExpense[] }>(`/api/jobs/${jobId}/expenses`);
+    },
+
+    getJobTimeEntries(jobId: number) {
+      return request<{ ok: boolean; entries: JobTimeEntry[] }>(`/api/jobs/${jobId}/time-entries`);
     },
   };
 }

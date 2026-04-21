@@ -1,19 +1,30 @@
 {
   "expo": {
-    "name": "hbs-mobile",
+    "name": "Hudson Business Solutions",
     "slug": "hbs-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "hbsmobile",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.hudsonbusinesssolutions.mobile"
+      "supportsTablet": false,
+      "bundleIdentifier": "com.hudsonbusinesssolutions.mobile",
+      "buildNumber": "3",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Used to photograph receipts for expense tracking.",
+        "NSPhotoLibraryUsageDescription": "Used to select receipt photos for expense tracking.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.hudsonbusinesssolutions.mobile",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -46,6 +57,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "be14702a-2ff9-429e-ac54-602dbb49dee6"
+      }
     }
   }
 }

@@ -24,7 +24,7 @@ export type LoginResponse = {
 export type JobListItem = {
   id: number;
   jobName: string;
-  customerName: string | null;
+  clientName: string | null;
   status: string | null;
   isOverhead?: boolean;
   description?: string | null;
@@ -285,4 +285,23 @@ export type AddIncomeArgs = {
   amount: number;
   date: string;
   description?: string;
+};
+
+export type JobExpense = {
+  id: number;
+  jobId: number;
+  category: string;
+  vendor: string | null;
+  amount: number;
+  date: string;
+};
+
+export type JobTimeEntry = {
+  id: number;
+  employeeId: number;
+  employeeName: string;
+  date: string;
+  hours: number;
+  note: string | null;
+  entryMethod: string | null;
 };

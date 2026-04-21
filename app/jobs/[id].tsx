@@ -5,10 +5,10 @@ import {
   SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { useApi } from '../../src/mobile/hooks/useApi';
-import { Colors, Radius, Spacing } from '../../src/mobile/theme';
-import type { JobIncome, JobListItem } from '../../src/mobile/types';
-import { formatCurrency, formatDate, formatHours, isManagerOrAdmin } from '../../src/mobile/utils';
 import { useAuth } from '../../src/mobile/context/AuthContext';
+import { Colors, Radius, Spacing } from '../../src/mobile/theme';
+import type { JobExpense, JobIncome, JobListItem, JobTimeEntry } from '../../src/mobile/types';
+import { formatCurrency, formatDate, formatHours, isManagerOrAdmin } from '../../src/mobile/utils';
 
 type Tab = 'overview' | 'income' | 'expenses' | 'time';
 
@@ -22,9 +22,12 @@ export default function JobDetailScreen() {
 
   const [job, setJob] = useState<JobListItem | null>(null);
   const [income, setIncome] = useState<JobIncome[]>([]);
+  const [expenseList, setExpenseList] = useState<JobExpense[]>([]);
+  const [timeEntries, setTimeEntries] = useState<JobTimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<Tab>('overview');
+
   const [addingIncome, setAddingIncome] = useState(false);
   const [incomeAmount, setIncomeAmount] = useState('');
   const [incomeDate, setIncomeDate] = useState(new Date().toISOString().slice(0, 10));
@@ -37,15 +40,19 @@ export default function JobDetailScreen() {
     if (!jobId) return;
     isRefresh ? setRefreshing(true) : setLoading(true);
     try {
-      const [jobRes, incomeRes] = await Promise.all([
+      const [jobRes, incomeRes, expRes, timeRes] = await Promise.all([
         api.getJobDetail(jobId),
         canManage ? api.getJobIncome(jobId).catch(() => null) : Promise.resolve(null),
+        canManage ? api.getJobExpenses(jobId).catch(() => null) : Promise.resolve(null),
+        canManage ? api.getJobTimeEntries(jobId).catch(() => null) : Promise.resolve(null),
       ]);
       if (jobRes.job) {
         setJob(jobRes.job);
         navigation.setOptions({ title: jobRes.job.jobName ?? 'Job Details' });
       }
       if (incomeRes?.income) setIncome(incomeRes.income);
+      if (expRes?.expenses) setExpenseList(expRes.expenses);
+      if (timeRes?.entries) setTimeEntries(timeRes.entries);
     } catch { /* ignore */ }
     finally { isRefresh ? setRefreshing(false) : setLoading(false); }
   }, [api, jobId, canManage, navigation]);
@@ -86,6 +93,8 @@ export default function JobDetailScreen() {
   }
 
   const f = job.financials;
+  const totalExpenses = expenseList.reduce((sum, e) => sum + e.amount, 0);
+  const totalTime = timeEntries.reduce((sum, e) => sum + e.hours, 0);
 
   return (
     <SafeAreaView style={s.safe}>
@@ -136,8 +145,8 @@ export default function JobDetailScreen() {
               <View style={s.statCard}><Text style={s.statLabel}>Hours</Text><Text style={s.statValue}>{formatHours(f.totalHours)}</Text></View>
               <View style={s.statCard}><Text style={s.statLabel}>Unpaid Inv.</Text><Text style={s.statValue}>{f.unpaidInvoices}</Text></View>
             </View>
-            {job.jobDescription ? (
-              <View style={s.card}><Text style={s.cardTitle}>Description</Text><Text style={s.cardBody}>{job.jobDescription}</Text></View>
+            {(job as any).jobDescription ? (
+              <View style={s.card}><Text style={s.cardTitle}>Description</Text><Text style={s.cardBody}>{(job as any).jobDescription}</Text></View>
             ) : null}
           </>
         )}
@@ -189,7 +198,25 @@ export default function JobDetailScreen() {
                 <Text style={s.addRowBtnText}>+ Add Expense</Text>
               </Pressable>
             )}
-            <Text style={s.empty}>View and add expenses for this job.</Text>
+            {expenseList.length === 0
+              ? <Text style={s.empty}>No expenses recorded.</Text>
+              : (
+                <>
+                  <View style={s.summaryRow}>
+                    <Text style={s.summaryLabel}>Total Expenses</Text>
+                    <Text style={s.summaryValue}>{formatCurrency(totalExpenses)}</Text>
+                  </View>
+                  {expenseList.map(e => (
+                    <View key={e.id} style={s.rowCard}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.rowAmount}>{formatCurrency(e.amount)}</Text>
+                        <Text style={s.rowSub}>{e.category}{e.vendor ? ` · ${e.vendor}` : ''} · {formatDate(e.date)}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </>
+              )
+            }
           </>
         )}
 
@@ -200,7 +227,26 @@ export default function JobDetailScreen() {
                 <Text style={s.addRowBtnText}>+ Add Time Entry</Text>
               </Pressable>
             )}
-            <Text style={s.empty}>Time entries are visible on the Timesheets tab.</Text>
+            {timeEntries.length === 0
+              ? <Text style={s.empty}>No time entries recorded.</Text>
+              : (
+                <>
+                  <View style={s.summaryRow}>
+                    <Text style={s.summaryLabel}>Total Hours</Text>
+                    <Text style={s.summaryValue}>{formatHours(totalTime)}</Text>
+                  </View>
+                  {timeEntries.map(e => (
+                    <View key={e.id} style={s.rowCard}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.rowAmount}>{e.employeeName}</Text>
+                        <Text style={s.rowSub}>{formatDate(e.date)}{e.note ? ` · ${e.note}` : ''}</Text>
+                      </View>
+                      <Text style={s.rowHours}>{formatHours(e.hours)}</Text>
+                    </View>
+                  ))}
+                </>
+              )
+            }
           </>
         )}
       </ScrollView>
@@ -231,6 +277,9 @@ const s = StyleSheet.create({
   card: { backgroundColor: Colors.card, borderRadius: Radius.md, padding: 14, borderWidth: 1, borderColor: Colors.border, gap: 10 },
   cardTitle: { fontSize: 14, fontWeight: '800', color: Colors.text },
   cardBody: { fontSize: 14, color: Colors.muted, lineHeight: 20 },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: Colors.card, borderRadius: Radius.md, padding: 12, borderWidth: 1, borderColor: Colors.border },
+  summaryLabel: { fontSize: 13, fontWeight: '700', color: Colors.muted },
+  summaryValue: { fontSize: 15, fontWeight: '900', color: Colors.text },
   addRowBtn: { backgroundColor: Colors.infoBg, borderRadius: Radius.md, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: Colors.infoBorder },
   addRowBtnText: { color: Colors.infoText, fontWeight: '700', fontSize: 13 },
   input: { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: 10, fontSize: 14, color: Colors.text, backgroundColor: Colors.bg },
@@ -241,6 +290,7 @@ const s = StyleSheet.create({
   rowCard: { backgroundColor: Colors.card, borderRadius: Radius.md, padding: 12, borderWidth: 1, borderColor: Colors.border, flexDirection: 'row', alignItems: 'center' },
   rowAmount: { fontSize: 15, fontWeight: '800', color: Colors.text },
   rowSub: { fontSize: 12, color: Colors.muted, marginTop: 2 },
+  rowHours: { fontSize: 14, fontWeight: '700', color: Colors.navy },
   deleteBtn: { padding: 8 },
   deleteBtnText: { color: Colors.danger, fontWeight: '700', fontSize: 16 },
   empty: { textAlign: 'center', color: Colors.muted, marginTop: 8 },

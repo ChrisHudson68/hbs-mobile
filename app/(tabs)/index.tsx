@@ -142,7 +142,7 @@ export default function DashboardScreen() {
               <Pressable style={s.quickBtn} onPress={() => router.push('/(tabs)/invoices')}>
                 <Text style={s.quickBtnText}>Invoices</Text>
               </Pressable>
-              <Pressable style={s.quickBtn} onPress={() => router.push('/employees/index')}>
+              <Pressable style={s.quickBtn} onPress={() => router.push('/employees')}>
                 <Text style={s.quickBtnText}>Employees</Text>
               </Pressable>
             </View>
