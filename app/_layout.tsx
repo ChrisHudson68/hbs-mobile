@@ -33,7 +33,7 @@ export default function RootLayout() {
         <Stack.Screen name="timesheets/manual" options={{ title: 'Add Time Entry', headerBackTitle: 'Timesheets' }} />
         <Stack.Screen name="invoices/new" options={{ title: 'New Invoice', headerBackTitle: 'Invoices' }} />
         <Stack.Screen name="invoices/[id]" options={{ title: 'Invoice', headerBackTitle: 'Invoices' }} />
-        <Stack.Screen name="employees/index" options={{ title: 'Employees', headerBackTitle: 'More' }} />
+        <Stack.Screen name="employees" options={{ title: 'Employees', headerBackTitle: 'More' }} />
         <Stack.Screen name="expenses/new" options={{ title: 'New Expense', headerBackTitle: 'More' }} />
       </Stack>
       <StatusBar style="auto" />

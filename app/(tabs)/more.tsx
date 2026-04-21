@@ -8,7 +8,7 @@ type MenuItem = { label: string; sub: string; path: string; managerOnly?: boolea
 
 const MENU: MenuItem[] = [
   { label: 'Add Expense', sub: 'Upload receipt and log expense', path: '/expenses/new', managerOnly: true },
-  { label: 'Employees', sub: 'View employee roster and pay info', path: '/employees/index', managerOnly: true },
+  { label: 'Employees', sub: 'View employee roster and pay info', path: '/employees', managerOnly: true },
   { label: 'Manual Time Entry', sub: 'Log hours for any employee', path: '/timesheets/manual', managerOnly: true },
 ];
 
