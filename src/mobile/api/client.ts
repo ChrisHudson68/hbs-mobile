@@ -187,8 +187,12 @@ export function createApiClient({
       return request<ClockInJobsResponse>('/api/timesheets/clock-in-jobs');
     },
 
-    getTimesheets() {
-      return request<TimesheetsResponse>('/api/timesheets');
+    getTimesheets(params?: { employeeId?: number; start?: string }) {
+      const qs = new URLSearchParams();
+      if (params?.employeeId) qs.set('employeeId', String(params.employeeId));
+      if (params?.start) qs.set('start', params.start);
+      const query = qs.toString();
+      return request<TimesheetsResponse>(`/api/timesheets${query ? `?${query}` : ''}`);
     },
 
     clockIn(args: ClockInArgs) {
@@ -200,10 +204,10 @@ export function createApiClient({
       });
     },
 
-    clockOut() {
+    clockOut(note?: string) {
       return request<ClockOutResponse>('/api/timesheets/clock-out', {
         method: 'POST',
-        body: JSON.stringify({}),
+        body: JSON.stringify({ note: note ?? null }),
       });
     },
 
@@ -296,8 +300,37 @@ export function createApiClient({
       return request<{ ok: boolean; expenses: JobExpense[] }>(`/api/jobs/${jobId}/expenses`);
     },
 
+    editExpense(expenseId: number, args: { category: string; vendor?: string; amount: number; date: string }) {
+      return request<{ ok: boolean }>(`/api/expenses/${expenseId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(args),
+      });
+    },
+
+    deleteExpense(expenseId: number) {
+      return request<{ ok: boolean }>(`/api/expenses/${expenseId}`, { method: 'DELETE' });
+    },
+
     getJobTimeEntries(jobId: number) {
       return request<{ ok: boolean; entries: JobTimeEntry[] }>(`/api/jobs/${jobId}/time-entries`);
+    },
+
+    deleteTimeEntry(entryId: number) {
+      return request<{ ok: boolean }>(`/api/timesheets/${entryId}`, { method: 'DELETE' });
+    },
+
+    editTimeEntry(entryId: number, args: { hours?: number; note?: string | null; date?: string; jobId?: number }) {
+      return request<{ ok: boolean }>(`/api/timesheets/${entryId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(args),
+      });
+    },
+
+    approveWeek(employeeId: number, weekStart: string) {
+      return request<{ ok: boolean }>('/api/timesheets/approve-week', {
+        method: 'POST',
+        body: JSON.stringify({ employeeId, weekStart }),
+      });
     },
   };
 }

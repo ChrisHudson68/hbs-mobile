@@ -2,8 +2,15 @@ import { Tabs } from 'expo-router';
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '../../src/mobile/theme';
+import { useAppState } from '../../src/mobile/context/AppStateContext';
+import { useAuth } from '../../src/mobile/context/AuthContext';
+import { isManagerOrAdmin } from '../../src/mobile/utils';
 
 export default function TabLayout() {
+  const { unpaidInvoiceCount, isClockedIn } = useAppState();
+  const { user } = useAuth();
+  const canManage = isManagerOrAdmin(user);
+
   return (
     <Tabs
       screenOptions={{
@@ -38,6 +45,8 @@ export default function TabLayout() {
         options={{
           title: 'Timesheets',
           tabBarIcon: ({ color }) => <IconSymbol name="clock.fill" size={24} color={color} />,
+          tabBarBadge: isClockedIn ? '●' : undefined,
+          tabBarBadgeStyle: { backgroundColor: Colors.success, color: Colors.success, fontSize: 6, minWidth: 12, height: 12 },
         }}
       />
       <Tabs.Screen
@@ -45,6 +54,8 @@ export default function TabLayout() {
         options={{
           title: 'Invoices',
           tabBarIcon: ({ color }) => <IconSymbol name="doc.text.fill" size={24} color={color} />,
+          tabBarBadge: canManage && unpaidInvoiceCount > 0 ? unpaidInvoiceCount : undefined,
+          tabBarBadgeStyle: { backgroundColor: Colors.danger, fontSize: 10 },
         }}
       />
       <Tabs.Screen

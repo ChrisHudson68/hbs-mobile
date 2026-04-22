@@ -2,6 +2,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { AuthProvider, useAuth } from '../src/mobile/context/AuthContext';
+import { AppStateProvider } from '../src/mobile/context/AppStateContext';
 
 function RootRedirect() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -24,6 +25,7 @@ function RootRedirect() {
 export default function RootLayout() {
   return (
     <AuthProvider>
+      <AppStateProvider>
       <RootRedirect />
       <Stack>
         <Stack.Screen name="login" options={{ headerShown: false }} />
@@ -37,6 +39,7 @@ export default function RootLayout() {
         <Stack.Screen name="expenses/new" options={{ title: 'New Expense', headerBackTitle: 'More' }} />
       </Stack>
       <StatusBar style="auto" />
+      </AppStateProvider>
     </AuthProvider>
   );
 }

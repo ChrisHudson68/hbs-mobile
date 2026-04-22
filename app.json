@@ -2,7 +2,7 @@
   "expo": {
     "name": "Hudson Business Solutions",
     "slug": "hbs-mobile",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "hbsmobile",
@@ -11,19 +11,25 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.hudsonbusinesssolutions.mobile",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "infoPlist": {
         "NSCameraUsageDescription": "Used to photograph receipts for expense tracking.",
         "NSPhotoLibraryUsageDescription": "Used to select receipt photos for expense tracking.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
       "package": "com.hudsonbusinesssolutions.mobile",
-      "versionCode": 1,
+      "versionCode": 4,
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.READ_MEDIA_IMAGES"
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.POST_NOTIFICATIONS"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -52,7 +58,15 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#1E3A5F",
+          "sounds": []
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
