@@ -38,6 +38,8 @@ type LoginArgs = {
 
 type ClockInArgs = {
   jobId: number;
+  lat?: number;
+  lng?: number;
 };
 
 type CreateExpenseArgs = {
@@ -200,8 +202,14 @@ export function createApiClient({
         method: 'POST',
         body: JSON.stringify({
           jobId: args.jobId,
+          lat: args.lat ?? null,
+          lng: args.lng ?? null,
         }),
       });
+    },
+
+    getInvoicePdfUrl(invoiceId: number, tenantSubdomain: string): string {
+      return `${CONFIG.API_BASE_URL}/api/invoices/${invoiceId}/pdf`;
     },
 
     clockOut(note?: string) {

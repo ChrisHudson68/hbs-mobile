@@ -2,8 +2,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, Pressable, SafeAreaView,
-  ScrollView, StyleSheet, Text, TextInput, View,
+  ActionSheetIOS, ActivityIndicator, Alert, Image, Platform,
+  Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { useApi } from '../../src/mobile/hooks/useApi';
 import { Colors, Radius, Spacing } from '../../src/mobile/theme';
@@ -42,15 +42,7 @@ export default function NewExpenseScreen() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const handlePickReceipt = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-      allowsEditing: false,
-    });
-    if (result.canceled || !result.assets?.[0]) return;
-
-    const asset = result.assets[0];
+  const uploadAsset = async (asset: ImagePicker.ImagePickerAsset) => {
     setReceiptUri(asset.uri);
     setUploadingReceipt(true);
     try {
@@ -73,6 +65,48 @@ export default function NewExpenseScreen() {
       setReceiptUri(null);
     } finally {
       setUploadingReceipt(false);
+    }
+  };
+
+  const launchCamera = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission Required', 'Camera permission is needed to take a photo.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.8, allowsEditing: false });
+    if (result.canceled || !result.assets?.[0]) return;
+    await uploadAsset(result.assets[0]);
+  };
+
+  const launchLibrary = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+      allowsEditing: false,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    await uploadAsset(result.assets[0]);
+  };
+
+  const handlePickReceipt = () => {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Take Photo', 'Choose from Library'],
+          cancelButtonIndex: 0,
+        },
+        (index) => {
+          if (index === 1) void launchCamera();
+          if (index === 2) void launchLibrary();
+        },
+      );
+    } else {
+      Alert.alert('Receipt Photo', 'How would you like to add a receipt?', [
+        { text: 'Take Photo', onPress: () => void launchCamera() },
+        { text: 'Choose from Library', onPress: () => void launchLibrary() },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
     }
   };
 
@@ -135,7 +169,7 @@ export default function NewExpenseScreen() {
           </View>
         </View>
 
-        <Pressable style={s.receiptBtn} onPress={() => void handlePickReceipt()} disabled={uploadingReceipt}>
+        <Pressable style={s.receiptBtn} onPress={handlePickReceipt} disabled={uploadingReceipt}>
           {uploadingReceipt ? (
             <View style={{ alignItems: 'center', gap: 8 }}>
               <ActivityIndicator color={Colors.navy} />
@@ -147,7 +181,11 @@ export default function NewExpenseScreen() {
               <Text style={s.receiptBtnText}>Tap to replace receipt</Text>
             </View>
           ) : (
-            <Text style={s.receiptBtnText}>📷  Upload Receipt Photo</Text>
+            <View style={{ alignItems: 'center', gap: 6 }}>
+              <Text style={s.receiptIcon}>📷</Text>
+              <Text style={s.receiptBtnText}>Add Receipt Photo</Text>
+              <Text style={s.receiptHint}>Take a photo or choose from library</Text>
+            </View>
           )}
         </Pressable>
 
@@ -192,7 +230,9 @@ const s = StyleSheet.create({
   segText: { fontSize: 12, fontWeight: '600', color: Colors.muted },
   segTextActive: { color: '#fff' },
   receiptBtn: { backgroundColor: Colors.card, borderRadius: Radius.md, padding: 20, alignItems: 'center', borderWidth: 2, borderColor: Colors.border, borderStyle: 'dashed' },
+  receiptIcon: { fontSize: 28 },
   receiptBtnText: { fontSize: 14, fontWeight: '700', color: Colors.navy },
+  receiptHint: { fontSize: 12, color: Colors.muted },
   receiptPreview: { width: 120, height: 120, borderRadius: Radius.sm },
   input: { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: 12, fontSize: 15, color: Colors.text, backgroundColor: Colors.card },
   saveBtn: { backgroundColor: Colors.navy, borderRadius: Radius.md, padding: 14, alignItems: 'center', marginTop: 8 },
