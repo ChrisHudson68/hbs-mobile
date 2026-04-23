@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import * as Location from 'expo-location';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator, Alert, Modal, Pressable, RefreshControl,
@@ -7,6 +8,7 @@ import {
 import { useAuth } from '../../src/mobile/context/AuthContext';
 import { useApi } from '../../src/mobile/hooks/useApi';
 import { useAppState } from '../../src/mobile/context/AppStateContext';
+import { enqueueClockIn, enqueueClockOut, isOnline, useOfflineQueueFlusher } from '../../src/mobile/hooks/useOfflineQueue';
 import { Colors, Radius, Spacing } from '../../src/mobile/theme';
 import type { ClockInJobsResponse, Employee, JobListItem, TimesheetsResponse, TimesheetEntry } from '../../src/mobile/types';
 import { formatDate, formatDuration, formatHours, hasPermission, isManagerOrAdmin } from '../../src/mobile/utils';
@@ -110,8 +112,28 @@ export default function TimesheetsScreen() {
   const handleClockIn = async () => {
     if (!selectedJobId) { Alert.alert('Required', 'Select a job before clocking in.'); return; }
     setClockLoading(true);
+
+    let lat: number | null = null;
+    let lng: number | null = null;
     try {
-      await api.clockIn({ jobId: selectedJobId });
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        lat = loc.coords.latitude;
+        lng = loc.coords.longitude;
+      }
+    } catch {
+      // GPS is best-effort — continue without it
+    }
+
+    try {
+      const online = await isOnline();
+      if (!online) {
+        await enqueueClockIn({ jobId: selectedJobId, lat, lng });
+        Alert.alert('Queued', "You're offline. Your clock-in will sync when you reconnect.");
+        return;
+      }
+      await api.clockIn({ jobId: selectedJobId, lat: lat ?? undefined, lng: lng ?? undefined });
       await load();
       refreshAppState();
       Alert.alert('Clocked In', 'Your time entry has started.');
@@ -124,8 +146,16 @@ export default function TimesheetsScreen() {
   const confirmClockOut = async () => {
     setShowClockOutNote(false);
     setClockLoading(true);
+    const note = clockOutNote.trim() || null;
     try {
-      const res = await api.clockOut(clockOutNote.trim() || undefined);
+      const online = await isOnline();
+      if (!online) {
+        await enqueueClockOut(note);
+        setClockOutNote('');
+        Alert.alert('Queued', "You're offline. Your clock-out will sync when you reconnect.");
+        return;
+      }
+      const res = await api.clockOut(note ?? undefined);
       setClockOutNote('');
       await load();
       refreshAppState();
@@ -133,6 +163,16 @@ export default function TimesheetsScreen() {
     } catch (e) { Alert.alert('Clock Out', e instanceof Error ? e.message : 'Failed'); }
     finally { setClockLoading(false); }
   };
+
+  useOfflineQueueFlusher({
+    clockIn: (args) => api.clockIn(args),
+    clockOut: (note) => api.clockOut(note),
+    onFlushed: (count) => {
+      void load();
+      refreshAppState();
+      Alert.alert('Synced', `${count} queued action${count > 1 ? 's' : ''} synced successfully.`);
+    },
+  });
 
   const openEdit = (entry: TimesheetEntry) => {
     setEditEntry(entry);

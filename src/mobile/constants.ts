@@ -6,6 +6,8 @@ export const STORAGE_KEYS = {
   tenant: 'hbs_mobile_tenant',
   token: 'hbs_mobile_token',
   user: 'hbs_mobile_user',
+  biometricsEnabled: 'hbs_mobile_biometrics_enabled',
+  offlineQueue: 'hbs_mobile_offline_queue',
 } as const;
 
 export const EXPENSE_CATEGORIES = [

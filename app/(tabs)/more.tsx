@@ -1,8 +1,11 @@
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
-import { Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useAuth } from '../../src/mobile/context/AuthContext';
 import { useAppState } from '../../src/mobile/context/AppStateContext';
+import { useBiometrics } from '../../src/mobile/hooks/useBiometrics';
+import { cancelWeeklySummaryNotification, scheduleWeeklySummaryNotification } from '../../src/mobile/notifications';
 import { Colors, Radius, Spacing } from '../../src/mobile/theme';
 import { isManagerOrAdmin } from '../../src/mobile/utils';
 
@@ -35,6 +38,32 @@ export default function MoreScreen() {
   const { isClockedIn } = useAppState();
   const router = useRouter();
   const canManage = isManagerOrAdmin(user);
+  const biometrics = useBiometrics();
+
+  const handleToggleBiometrics = async () => {
+    if (biometrics.enabled) {
+      Alert.alert('Disable Biometrics', `Stop using ${biometrics.biometricType ?? 'biometrics'} to sign in?`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Disable', style: 'destructive', onPress: () => void biometrics.disable() },
+      ]);
+    } else {
+      const success = await biometrics.enable();
+      if (!success) {
+        Alert.alert('Not Enabled', 'Biometric authentication could not be verified. Try again.');
+      }
+    }
+  };
+
+  const [weeklySummaryOn, setWeeklySummaryOn] = useState(false);
+
+  const handleToggleWeeklySummary = async (value: boolean) => {
+    setWeeklySummaryOn(value);
+    if (value) {
+      await scheduleWeeklySummaryNotification();
+    } else {
+      await cancelWeeklySummaryNotification();
+    }
+  };
 
   const items = MENU.filter(m => !m.managerOnly || canManage);
   const roleColor = getRoleColor(user?.role ?? '');
@@ -99,6 +128,37 @@ export default function MoreScreen() {
               <Text style={s.chevron}>›</Text>
             </Pressable>
           ))}
+        </View>
+
+        {/* Settings */}
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>Settings</Text>
+
+          {biometrics.available && (
+            <View style={s.settingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.settingLabel}>{biometrics.biometricType ?? 'Biometrics'}</Text>
+                <Text style={s.settingSub}>Sign in without typing your password</Text>
+              </View>
+              <Switch
+                value={biometrics.enabled}
+                onValueChange={() => void handleToggleBiometrics()}
+                trackColor={{ true: Colors.navy }}
+              />
+            </View>
+          )}
+
+          <View style={s.settingRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.settingLabel}>Weekly Hours Reminder</Text>
+              <Text style={s.settingSub}>Friday at 4 PM — review your timesheet</Text>
+            </View>
+            <Switch
+              value={weeklySummaryOn}
+              onValueChange={(v) => void handleToggleWeeklySummary(v)}
+              trackColor={{ true: Colors.navy }}
+            />
+          </View>
         </View>
 
         {/* Sign out */}
@@ -185,4 +245,11 @@ const s = StyleSheet.create({
   logoutText: { color: Colors.danger, fontWeight: '800', fontSize: 15 },
 
   versionText: { textAlign: 'center', fontSize: 11, color: Colors.mutedLight, marginTop: 4 },
+  settingRow: {
+    backgroundColor: Colors.card, borderRadius: Radius.md, padding: 14,
+    borderWidth: 1, borderColor: Colors.border,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+  },
+  settingLabel: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  settingSub: { fontSize: 12, color: Colors.muted, marginTop: 2 },
 });

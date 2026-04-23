@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 const CLOCK_OUT_REMINDER_ID = 'clock-out-reminder';
+const WEEKLY_SUMMARY_ID = 'weekly-hours-summary';
 const REMINDER_HOURS = 8;
 
 Notifications.setNotificationHandler({
@@ -55,6 +56,41 @@ export async function scheduleClockOutReminder(clockInAt: string): Promise<void>
 export async function cancelClockOutReminder(): Promise<void> {
   try {
     await Notifications.cancelScheduledNotificationAsync(CLOCK_OUT_REMINDER_ID);
+  } catch {
+    // ignore
+  }
+}
+
+export async function scheduleWeeklySummaryNotification(): Promise<void> {
+  try {
+    const granted = await requestNotificationPermission();
+    if (!granted) return;
+
+    await Notifications.cancelScheduledNotificationAsync(WEEKLY_SUMMARY_ID);
+
+    // Fire every Friday at 4 PM
+    await Notifications.scheduleNotificationAsync({
+      identifier: WEEKLY_SUMMARY_ID,
+      content: {
+        title: 'Weekly Hours Summary',
+        body: "Your week wraps up soon — check your timesheet to review this week's hours.",
+        data: { screen: 'timesheets' },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+        weekday: 6, // Friday (1=Sun, 6=Fri)
+        hour: 16,
+        minute: 0,
+      },
+    });
+  } catch {
+    // Notifications are best-effort
+  }
+}
+
+export async function cancelWeeklySummaryNotification(): Promise<void> {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(WEEKLY_SUMMARY_ID);
   } catch {
     // ignore
   }

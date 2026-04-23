@@ -1,4 +1,6 @@
+import { File, Paths } from 'expo-file-system';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator, Alert, Pressable, RefreshControl,
@@ -6,6 +8,7 @@ import {
 } from 'react-native';
 import { useApi } from '../../src/mobile/hooks/useApi';
 import { useAuth } from '../../src/mobile/context/AuthContext';
+import { CONFIG } from '../../src/mobile/constants';
 import { Colors, Radius, Spacing } from '../../src/mobile/theme';
 import type { InvoiceDetail } from '../../src/mobile/types';
 import { formatCurrency, formatDate, isManagerOrAdmin } from '../../src/mobile/utils';
@@ -25,13 +28,13 @@ export default function InvoiceDetailScreen() {
   const api = useApi();
   const navigation = useNavigation();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, token, tenantSubdomain } = useAuth();
   const canManage = isManagerOrAdmin(user);
-
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [addingPayment, setAddingPayment] = useState(false);
   const [payAmount, setPayAmount] = useState('');
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
@@ -55,6 +58,37 @@ export default function InvoiceDetailScreen() {
   }, [api, invoiceId, navigation]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const handleSharePdf = async () => {
+    if (!invoice) return;
+    setPdfLoading(true);
+    try {
+      const url = `${CONFIG.API_BASE_URL}/api/invoices/${invoiceId}/pdf`;
+      const destFile = new File(Paths.cache, `invoice_${invoiceId}.pdf`);
+      const downloaded = await File.downloadFileAsync(url, destFile, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Subdomain': tenantSubdomain ?? '',
+        },
+        idempotent: true,
+      });
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert('Not Supported', 'Sharing is not available on this device.');
+        return;
+      }
+
+      await Sharing.shareAsync(downloaded.uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: `Invoice ${invoice.invoiceNumber ?? invoiceId}`,
+      });
+    } catch (e) {
+      Alert.alert('PDF Error', e instanceof Error ? e.message : 'Could not load PDF.');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   const handleRecordPayment = async () => {
     const amt = parseFloat(payAmount);
@@ -102,8 +136,16 @@ export default function InvoiceDetailScreen() {
               {invoice.jobName ? <Text style={s.heroSub}>{invoice.jobName}</Text> : null}
               {invoice.clientName ? <Text style={s.heroSub}>{invoice.clientName}</Text> : null}
             </View>
-            <View style={[s.badge, { backgroundColor: statusColor(invoice.status) + '30' }]}>
-              <Text style={[s.badgeText, { color: statusColor(invoice.status) }]}>{invoice.status}</Text>
+            <View style={{ alignItems: 'flex-end', gap: 8 }}>
+              <View style={[s.badge, { backgroundColor: statusColor(invoice.status) + '30' }]}>
+                <Text style={[s.badgeText, { color: statusColor(invoice.status) }]}>{invoice.status}</Text>
+              </View>
+              <Pressable style={s.pdfBtn} onPress={() => void handleSharePdf()} disabled={pdfLoading}>
+                {pdfLoading
+                  ? <ActivityIndicator size="small" color="rgba(255,255,255,0.8)" />
+                  : <Text style={s.pdfBtnText}>⬇ PDF</Text>
+                }
+              </Pressable>
             </View>
           </View>
           <View style={s.heroAmounts}>
@@ -218,6 +260,8 @@ const s = StyleSheet.create({
   heroSub: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 99 },
   badgeText: { fontSize: 11, fontWeight: '700' },
+  pdfBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: Radius.sm, borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)', minWidth: 60, alignItems: 'center' },
+  pdfBtnText: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '700' },
   heroAmounts: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.15)', paddingTop: 12 },
   heroAmtLabel: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' },
   heroAmt: { fontSize: 20, fontWeight: '900', color: '#fff', marginTop: 2 },

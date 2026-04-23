@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,14 +13,24 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../src/mobile/context/AuthContext';
+import { useBiometrics } from '../src/mobile/hooks/useBiometrics';
 import { Colors, Radius, Spacing } from '../src/mobile/theme';
 
 export default function LoginScreen() {
   const { login } = useAuth();
+  const biometrics = useBiometrics();
   const [subdomain, setSubdomain] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [biometricLoading, setBiometricLoading] = useState(false);
+
+  // Auto-prompt biometrics on mount if enabled
+  useEffect(() => {
+    if (!biometrics.available || !biometrics.enabled) return;
+    void handleBiometricLogin();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [biometrics.available, biometrics.enabled]);
 
   const handleLogin = async () => {
     const cleanSubdomain = subdomain.trim().toLowerCase();
@@ -35,6 +45,20 @@ export default function LoginScreen() {
       Alert.alert('Sign In Failed', err instanceof Error ? err.message : 'Check your credentials and try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBiometricLogin = async () => {
+    setBiometricLoading(true);
+    try {
+      const success = await biometrics.authenticate();
+      if (!success) {
+        // User cancelled — just let them use password
+      }
+    } catch {
+      // Biometric failed silently
+    } finally {
+      setBiometricLoading(false);
     }
   };
 
@@ -95,6 +119,21 @@ export default function LoginScreen() {
                 ? <ActivityIndicator color="#fff" />
                 : <Text style={s.btnText}>Sign In</Text>}
             </Pressable>
+
+            {biometrics.available && biometrics.enabled && (
+              <Pressable
+                style={[s.biometricBtn, biometricLoading && s.btnDisabled]}
+                onPress={() => void handleBiometricLogin()}
+                disabled={biometricLoading}
+              >
+                {biometricLoading
+                  ? <ActivityIndicator color={Colors.navy} />
+                  : <Text style={s.biometricBtnText}>
+                      Sign in with {biometrics.biometricType ?? 'Biometrics'}
+                    </Text>
+                }
+              </Pressable>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -122,4 +161,9 @@ const s = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.6 },
   btnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  biometricBtn: {
+    borderWidth: 1, borderColor: Colors.navy, borderRadius: Radius.md,
+    padding: 14, alignItems: 'center', backgroundColor: Colors.bg,
+  },
+  biometricBtnText: { color: Colors.navy, fontWeight: '700', fontSize: 14 },
 });
