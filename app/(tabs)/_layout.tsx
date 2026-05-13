@@ -7,7 +7,7 @@ import { useAuth } from '../../src/mobile/context/AuthContext';
 import { isManagerOrAdmin } from '../../src/mobile/utils';
 
 export default function TabLayout() {
-  const { unpaidInvoiceCount, isClockedIn } = useAppState();
+  const { unpaidInvoiceCount, pendingEditRequestCount, isClockedIn } = useAppState();
   const { user } = useAuth();
   const canManage = isManagerOrAdmin(user);
 
@@ -45,8 +45,10 @@ export default function TabLayout() {
         options={{
           title: 'Timesheets',
           tabBarIcon: ({ color }) => <IconSymbol name="clock.fill" size={24} color={color} />,
-          tabBarBadge: isClockedIn ? '●' : undefined,
-          tabBarBadgeStyle: { backgroundColor: Colors.success, color: Colors.success, fontSize: 6, minWidth: 12, height: 12 },
+          tabBarBadge: canManage && pendingEditRequestCount > 0 ? pendingEditRequestCount : isClockedIn ? '●' : undefined,
+          tabBarBadgeStyle: canManage && pendingEditRequestCount > 0
+            ? { backgroundColor: Colors.warning, fontSize: 10 }
+            : { backgroundColor: Colors.success, color: Colors.success, fontSize: 6, minWidth: 12, height: 12 },
         }}
       />
       <Tabs.Screen

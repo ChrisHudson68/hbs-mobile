@@ -6,12 +6,14 @@ import { cancelClockOutReminder, scheduleClockOutReminder } from '../notificatio
 
 type AppStateValue = {
   unpaidInvoiceCount: number;
+  pendingEditRequestCount: number;
   isClockedIn: boolean;
   refresh: () => void;
 };
 
 const AppStateContext = createContext<AppStateValue>({
   unpaidInvoiceCount: 0,
+  pendingEditRequestCount: 0,
   isClockedIn: false,
   refresh: () => {},
 });
@@ -19,6 +21,7 @@ const AppStateContext = createContext<AppStateValue>({
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const { token, tenantSubdomain, isAuthenticated, logout } = useAuth();
   const [unpaidInvoiceCount, setUnpaidInvoiceCount] = useState(0);
+  const [pendingEditRequestCount, setPendingEditRequestCount] = useState(0);
   const [isClockedIn, setIsClockedIn] = useState(false);
   const appState = useRef(AppState.currentState);
   const prevClockedIn = useRef(false);
@@ -27,14 +30,16 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     if (!isAuthenticated || !token || !tenantSubdomain) return;
     const api = createApiClient({ tenantSubdomain, token, onUnauthorized: logout });
     try {
-      const [invoicesRes, tsRes] = await Promise.all([
+      const [invoicesRes, tsRes, editReqRes] = await Promise.all([
         api.getInvoices().catch(() => null),
         api.getTimesheets().catch(() => null),
+        api.getTimesheetEditRequests().catch(() => null),
       ]);
       if (invoicesRes?.invoices) {
         const unpaid = invoicesRes.invoices.filter(i => i.status?.toLowerCase() === 'unpaid').length;
         setUnpaidInvoiceCount(unpaid);
       }
+      setPendingEditRequestCount(editReqRes?.requests?.length ?? 0);
       if (tsRes) {
         const nowClockedIn = !!tsRes.activeClockEntry;
         setIsClockedIn(nowClockedIn);
@@ -65,7 +70,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [fetchSummary]);
 
   return (
-    <AppStateContext.Provider value={{ unpaidInvoiceCount, isClockedIn, refresh: fetchSummary }}>
+    <AppStateContext.Provider value={{ unpaidInvoiceCount, pendingEditRequestCount, isClockedIn, refresh: fetchSummary }}>
       {children}
     </AppStateContext.Provider>
   );

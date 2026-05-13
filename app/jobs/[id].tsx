@@ -37,6 +37,11 @@ export default function JobDetailScreen() {
   const [expDate, setExpDate] = useState('');
   const [expSaving, setExpSaving] = useState(false);
 
+  const [editTimeEntry, setEditTimeEntry] = useState<JobTimeEntry | null>(null);
+  const [timeEditHours, setTimeEditHours] = useState('');
+  const [timeEditNote, setTimeEditNote] = useState('');
+  const [timeEditSaving, setTimeEditSaving] = useState(false);
+
   const handleStatusChange = async (newStatus: string) => {
     if (newStatus === job?.status) return;
     setStatusSaving(true);
@@ -139,6 +144,31 @@ export default function JobDetailScreen() {
     ]);
   };
 
+  const openEditTimeEntry = (entry: JobTimeEntry) => {
+    setEditTimeEntry(entry);
+    setTimeEditHours(String(entry.hours));
+    setTimeEditNote(entry.note ?? '');
+  };
+
+  const confirmEditTimeEntry = async () => {
+    if (!editTimeEntry) return;
+    const hours = parseFloat(timeEditHours);
+    if (isNaN(hours) || hours <= 0 || hours > 24) {
+      Alert.alert('Invalid', 'Enter a valid number of hours (0–24).');
+      return;
+    }
+    setTimeEditSaving(true);
+    try {
+      await api.editTimeEntry(editTimeEntry.id, {
+        hours,
+        note: timeEditNote.trim() || null,
+      });
+      setEditTimeEntry(null);
+      await load();
+    } catch (e) { Alert.alert('Error', e instanceof Error ? e.message : 'Failed'); }
+    finally { setTimeEditSaving(false); }
+  };
+
   const handleDeleteIncome = (incomeId: number) => {
     Alert.alert('Delete Income', 'Remove this income entry?', [
       { text: 'Cancel', style: 'cancel' },
@@ -163,6 +193,27 @@ export default function JobDetailScreen() {
 
   return (
     <SafeAreaView style={s.safe}>
+      <Modal visible={!!editTimeEntry} transparent animationType="fade" onRequestClose={() => setEditTimeEntry(null)}>
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            <Text style={s.modalTitle}>Edit Time Entry</Text>
+            <Text style={[s.modalTitle, { fontSize: 13, fontWeight: '600', color: Colors.muted, marginTop: -8 }]}>
+              {editTimeEntry ? `${editTimeEntry.employeeName} · ${formatDate(editTimeEntry.date)}` : ''}
+            </Text>
+            <TextInput style={s.modalInput} placeholder="Hours" placeholderTextColor={Colors.mutedLight} value={timeEditHours} onChangeText={setTimeEditHours} keyboardType="decimal-pad" autoFocus />
+            <TextInput style={s.modalInput} placeholder="Note (optional)" placeholderTextColor={Colors.mutedLight} value={timeEditNote} onChangeText={setTimeEditNote} multiline />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Pressable style={[s.modalBtn, { flex: 1, backgroundColor: Colors.navy }]} onPress={() => void confirmEditTimeEntry()} disabled={timeEditSaving}>
+                {timeEditSaving ? <ActivityIndicator color="#fff" /> : <Text style={s.modalBtnText}>Save</Text>}
+              </Pressable>
+              <Pressable style={[s.modalBtn, { flex: 1, backgroundColor: Colors.bg, borderWidth: 1, borderColor: Colors.border }]} onPress={() => setEditTimeEntry(null)}>
+                <Text style={[s.modalBtnText, { color: Colors.muted }]}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={!!editExpense} transparent animationType="fade" onRequestClose={() => setEditExpense(null)}>
         <View style={s.modalOverlay}>
           <View style={s.modalCard}>
@@ -354,9 +405,14 @@ export default function JobDetailScreen() {
                       </View>
                       <Text style={s.rowHours}>{formatHours(e.hours)}</Text>
                       {canManage && (
-                        <Pressable onPress={() => handleDeleteTimeEntry(e.id)} style={s.deleteBtn}>
-                          <Text style={s.deleteBtnText}>✕</Text>
-                        </Pressable>
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                          <Pressable onPress={() => openEditTimeEntry(e)} style={s.editRowBtn}>
+                            <Text style={s.editRowBtnText}>Edit</Text>
+                          </Pressable>
+                          <Pressable onPress={() => handleDeleteTimeEntry(e.id)} style={s.deleteBtn}>
+                            <Text style={s.deleteBtnText}>✕</Text>
+                          </Pressable>
+                        </View>
                       )}
                     </View>
                   ))}

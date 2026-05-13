@@ -18,6 +18,8 @@ import {
     LoginResponse,
     ManualTimeEntryArgs,
     RecordPaymentArgs,
+    RequestTimesheetEditArgs,
+    TimesheetEditRequest,
     TimesheetsResponse,
     UpdateJobArgs,
     UploadReceiptResponse,
@@ -339,6 +341,32 @@ export function createApiClient({
         method: 'POST',
         body: JSON.stringify({ employeeId, weekStart }),
       });
+    },
+
+    reopenWeek(employeeId: number, weekStart: string) {
+      return request<{ ok: boolean }>('/api/timesheets/reopen-week', {
+        method: 'POST',
+        body: JSON.stringify({ employeeId, weekStart }),
+      });
+    },
+
+    requestTimesheetEdit(entryId: number, args: RequestTimesheetEditArgs) {
+      return request<{ ok: boolean }>(`/api/timesheets/${entryId}/request-edit`, {
+        method: 'POST',
+        body: JSON.stringify(args),
+      });
+    },
+
+    getTimesheetEditRequests() {
+      return request<{ ok: boolean; requests: TimesheetEditRequest[] }>('/api/timesheets/edit-requests');
+    },
+
+    approveEditRequest(requestId: number) {
+      return request<{ ok: boolean }>(`/api/timesheets/edit-requests/${requestId}/approve`, { method: 'POST' });
+    },
+
+    rejectEditRequest(requestId: number) {
+      return request<{ ok: boolean }>(`/api/timesheets/edit-requests/${requestId}/reject`, { method: 'POST' });
     },
   };
 }
