@@ -305,3 +305,24 @@ export type JobTimeEntry = {
   note: string | null;
   entryMethod: string | null;
 };
+
+export type TimesheetEditRequest = {
+  id: number;
+  timeEntryId: number;
+  employeeId: number;
+  employeeName: string;
+  proposedDate: string;
+  proposedHours: number;
+  proposedNote: string | null;
+  reason: string;
+  createdAt: string;
+  currentHours: number;
+  currentDate: string;
+  jobName: string | null;
+};
+
+export type RequestTimesheetEditArgs = {
+  proposedHours: number;
+  reason: string;
+  proposedNote?: string;
+};
