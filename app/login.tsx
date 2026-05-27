@@ -77,6 +77,7 @@ export default function LoginScreen() {
               <Text style={s.label}>Company Subdomain</Text>
               <TextInput
                 style={s.input}
+                testID="login-subdomain-input"
                 value={subdomain}
                 onChangeText={setSubdomain}
                 placeholder="yourcompany"
@@ -91,6 +92,7 @@ export default function LoginScreen() {
               <Text style={s.label}>Email</Text>
               <TextInput
                 style={s.input}
+                testID="login-email-input"
                 value={email}
                 onChangeText={setEmail}
                 placeholder="you@company.com"
@@ -105,6 +107,7 @@ export default function LoginScreen() {
               <Text style={s.label}>Password</Text>
               <TextInput
                 style={s.input}
+                testID="login-password-input"
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Password"
@@ -114,7 +117,7 @@ export default function LoginScreen() {
               />
             </View>
 
-            <Pressable style={[s.btn, loading && s.btnDisabled]} onPress={() => void handleLogin()} disabled={loading}>
+            <Pressable style={[s.btn, loading && s.btnDisabled]} onPress={() => void handleLogin()} disabled={loading} testID="login-submit-button">
               {loading
                 ? <ActivityIndicator color="#fff" />
                 : <Text style={s.btnText}>Sign In</Text>}
@@ -125,6 +128,7 @@ export default function LoginScreen() {
                 style={[s.biometricBtn, biometricLoading && s.btnDisabled]}
                 onPress={() => void handleBiometricLogin()}
                 disabled={biometricLoading}
+                testID="login-biometric-button"
               >
                 {biometricLoading
                   ? <ActivityIndicator color={Colors.navy} />
