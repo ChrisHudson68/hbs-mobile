@@ -41,3 +41,14 @@ app-example
 # generated native folders
 /ios
 /android
+
+# AI-generated files — stay local, never committed/pushed
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+GEMINI.md
+.claude/
+.planning/
+.cursor/
+.aider*
+.continue/
