@@ -1,6 +1,7 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../src/mobile/context/AuthContext';
 import { AppStateProvider } from '../src/mobile/context/AppStateContext';
 
@@ -24,6 +25,7 @@ function RootRedirect() {
 
 export default function RootLayout() {
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <AuthProvider>
       <AppStateProvider>
       <RootRedirect />
@@ -41,5 +43,6 @@ export default function RootLayout() {
       <StatusBar style="auto" />
       </AppStateProvider>
     </AuthProvider>
+    </GestureHandlerRootView>
   );
 }
