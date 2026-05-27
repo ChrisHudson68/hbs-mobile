@@ -47,7 +47,7 @@ export function Screen({
   const inner = scroll ? (
     <ScrollView
       style={s.flex}
-      contentContainerStyle={[s.scrollContent, contentPadding]}
+      contentContainerStyle={contentPadding}
       keyboardShouldPersistTaps="handled"
     >
       {children}
@@ -76,5 +76,4 @@ export function Screen({
 
 const s = StyleSheet.create({
   flex: { flex: 1 },
-  scrollContent: { flexGrow: 1 },
 });
