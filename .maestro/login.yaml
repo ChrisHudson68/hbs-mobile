@@ -1,0 +1,35 @@
+# Login E2E flow (VERIFY-02). Runs against the CURRENT (un-redesigned) Login screen
+# using the testIDs added in plan 01-06. Credentials are passed at runtime via env
+# vars (-e SUBDOMAIN=.. -e EMAIL=.. -e PASSWORD=..) — never hardcoded here.
+#
+# appId is the locally-built bundle id (temp org-team id com.hbs.mobile), NOT the
+# app.json com.hudsonbusinesssolutions.mobile — see 01-06-SUMMARY deviation note.
+appId: com.hbs.mobile
+---
+# Reset auth so the flow always starts logged-out at the Login screen. The session
+# token lives in the iOS keychain (expo-secure-store), so clearKeychain alone is
+# enough — AuthContext finds no token on the next launch and shows Login. (We avoid
+# Maestro clearState here: its app-reinstall path is broken on the Xcode 26 simctl.)
+- clearKeychain
+- launchApp
+- assertVisible:
+    id: "login-subdomain-input"
+- tapOn:
+    id: "login-subdomain-input"
+- inputText: "${SUBDOMAIN}"
+- tapOn:
+    id: "login-email-input"
+- inputText: "${EMAIL}"
+- tapOn:
+    id: "login-password-input"
+- inputText: "${PASSWORD}"
+- hideKeyboard
+- tapOn:
+    id: "login-submit-button"
+# Post-login assertion: login is an async network call, so WAIT (up to 20s) for the
+# authenticated shell rather than racing it. "THIS WEEK" is a stable Dashboard label.
+# Other screens have no testIDs in Phase 1, so we assert on visible Dashboard text.
+- extendedWaitUntil:
+    visible: "THIS WEEK"
+    timeout: 20000
+- assertVisible: "FINANCIALS"
