@@ -1,6 +1,6 @@
 import { SymbolViewProps } from 'expo-symbols';
 import { ReactNode } from 'react';
-import { Pressable, StyleSheet, Switch, View, ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text as RNText, View, ViewStyle } from 'react-native';
 
 import { useTheme } from '../../src/mobile/theme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -92,19 +92,41 @@ export function ListRow({
             onValueChange={onPress}
           />
         );
-      case 'badge':
-        return trailingBadge ? (
+      case 'badge': {
+        if (!trailingBadge) return null;
+        // tone -> {bg, label} per the UI-SPEC Badge tone contract. Applied inline
+        // (the kit Text has no color-override prop, and its tone set lacks
+        // info/accent), so the label color is set directly on RNText.
+        const badgeTone = trailingBadge.tone ?? 'neutral';
+        const toneColors: Record<NonNullable<TrailingBadge['tone']>, { bg: string; label: string }> = {
+          neutral: { bg: colors.muted, label: colors.inverse },
+          success: { bg: colors.successBg, label: colors.success },
+          warning: { bg: colors.warningBg, label: colors.warning },
+          danger: { bg: colors.dangerBg, label: colors.danger },
+          info: { bg: colors.infoBg, label: colors.infoText },
+          accent: { bg: colors.yellow, label: colors.text },
+        };
+        const { bg, label } = toneColors[badgeTone];
+        return (
           <View
             style={[
               s.badge,
-              { backgroundColor: colors.dangerBg, borderRadius: radius.pill, paddingHorizontal: spacing.sm },
+              { backgroundColor: bg, borderRadius: radius.pill, paddingHorizontal: spacing.sm },
             ]}
           >
-            <Text variant="caption" tone={trailingBadge.tone === 'danger' ? 'danger' : 'muted'}>
+            <RNText
+              style={{
+                color: label,
+                fontSize: typographyRamp.caption.fontSize,
+                fontWeight: typographyRamp.caption.fontWeight,
+                lineHeight: typographyRamp.caption.lineHeight,
+              }}
+            >
               {trailingBadge.label}
-            </Text>
+            </RNText>
           </View>
-        ) : null;
+        );
+      }
       case 'custom':
         return trailingCustom ?? null;
       case 'none':
