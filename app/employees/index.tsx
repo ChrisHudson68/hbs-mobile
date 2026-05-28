@@ -1,11 +1,17 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, RefreshControl, SafeAreaView,
-  ScrollView, StyleSheet, Text, View,
+  ActivityIndicator, Pressable, RefreshControl,
+  ScrollView, StyleSheet, Text as RNText, View,
 } from 'react-native';
+import { Badge } from '@/components/ui/Badge';
+import { Input } from '@/components/ui/Input';
+import { Screen } from '@/components/ui/Screen';
+import { SectionHeader } from '@/components/ui/SectionHeader';
+import { Text } from '@/components/ui/Text';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useApi } from '../../src/mobile/hooks/useApi';
-import { Colors, Radius, Spacing } from '../../src/mobile/theme';
+import { useTheme } from '../../src/mobile/theme';
 import type { Employee } from '../../src/mobile/types';
 import { formatCurrency } from '../../src/mobile/utils';
 
@@ -19,12 +25,18 @@ function payLabel(emp: Employee) {
   return emp.payType ?? '—';
 }
 
+function getInitials(name: string) {
+  return name.trim().split(/\s+/).map(w => w[0]?.toUpperCase() ?? '').slice(0, 2).join('');
+}
+
 export default function EmployeesScreen() {
   const api = useApi();
   const router = useRouter();
+  const { colors, spacing, radius } = useTheme();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState('');
 
   const load = useCallback(async (isRefresh = false) => {
     isRefresh ? setRefreshing(true) : setLoading(true);
@@ -37,71 +49,155 @@ export default function EmployeesScreen() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const active = employees.filter(e => e.active);
-  const inactive = employees.filter(e => !e.active);
+  // Client-side filter before splitting active/inactive — no API call
+  const filtered = employees.filter(e =>
+    !search || e.name.toLowerCase().includes(search.toLowerCase())
+  );
+  const active = filtered.filter(e => e.active);
+  const inactive = filtered.filter(e => !e.active);
 
   if (loading) {
-    return <SafeAreaView style={s.safe}><View style={s.center}><ActivityIndicator size="large" color={Colors.navy} /></View></SafeAreaView>;
+    return (
+      <Screen headerMode="native">
+        <View style={s.center}>
+          <ActivityIndicator size="large" color={colors.navy} />
+        </View>
+      </Screen>
+    );
   }
 
+  const isEmpty = filtered.length === 0;
+
   return (
-    <SafeAreaView style={s.safe}>
+    <Screen headerMode="native" padded={false}>
       <ScrollView
-        contentContainerStyle={s.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
+        contentContainerStyle={{ padding: spacing.md, gap: 10 }}
+        contentInsetAdjustmentBehavior="automatic"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />
+        }
       >
-        <Text style={s.title}>Employees</Text>
+        <Input
+          leftIcon="magnifyingglass"
+          placeholder="Search employees…"
+          value={search}
+          onChangeText={setSearch}
+          testID="employees-search-input"
+        />
 
-        <Text style={s.sectionHeader}>Active ({active.length})</Text>
-        {active.length === 0 && <Text style={s.empty}>No active employees.</Text>}
-        {active.map(emp => (
-          <View key={emp.id} style={s.card}>
-            <View style={s.avatarCircle}>
-              <Text style={s.avatarText}>{emp.name.charAt(0).toUpperCase()}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.empName}>{emp.name}</Text>
-              <Text style={s.empPay}>{payLabel(emp)}</Text>
-            </View>
-            <View style={s.activeBadge}>
-              <Text style={s.activeBadgeText}>Active</Text>
-            </View>
+        {/* Search-empty state */}
+        {isEmpty && search.length > 0 && (
+          <View style={s.emptyState}>
+            <IconSymbol name="magnifyingglass" size={48} color={colors.mutedLight} />
+            <RNText style={{ textAlign: 'center', color: colors.muted, fontSize: 15 }}>
+              {`No employees match "${search}"`}
+            </RNText>
           </View>
-        ))}
+        )}
 
-        {inactive.length > 0 && (
+        {/* Empty state (no employees at all) */}
+        {isEmpty && search.length === 0 && (
+          <View style={s.emptyState}>
+            <IconSymbol name="person.2" size={48} color={colors.mutedLight} />
+            <RNText style={{ textAlign: 'center', color: colors.muted, fontSize: 15 }}>
+              No employees found.
+            </RNText>
+          </View>
+        )}
+
+        {/* Active section */}
+        {!isEmpty && (
           <>
-            <Text style={[s.sectionHeader, { marginTop: 8 }]}>Inactive ({inactive.length})</Text>
+            <SectionHeader title={`Active (${active.length})`} />
+            {active.map((emp, idx) => (
+              <Pressable
+                key={emp.id}
+                testID={idx === 0 ? 'employees-row-0' : undefined}
+                onPress={() => router.push(`/employees/${emp.id}` as never)}
+                style={[
+                  s.row,
+                  {
+                    backgroundColor: colors.card,
+                    borderRadius: radius.md,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    padding: spacing.sm,
+                    gap: spacing.sm,
+                  },
+                ]}
+              >
+                {/* Avatar */}
+                <View
+                  style={[
+                    s.avatar,
+                    { backgroundColor: colors.navy, borderRadius: radius.pill },
+                  ]}
+                >
+                  <Text variant="footnote" weight="600" tone="inverse">
+                    {getInitials(emp.name)}
+                  </Text>
+                </View>
+                {/* Name + pay */}
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text variant="headline" weight="600">{emp.name}</Text>
+                  <Text variant="footnote" tone="muted">{payLabel(emp)}</Text>
+                </View>
+                {/* Active badge */}
+                <Badge tone="success" label="Active" size="sm" />
+              </Pressable>
+            ))}
+          </>
+        )}
+
+        {/* Inactive section — only when there are inactive employees */}
+        {!isEmpty && inactive.length > 0 && (
+          <>
+            <SectionHeader title={`Inactive (${inactive.length})`} />
             {inactive.map(emp => (
-              <View key={emp.id} style={[s.card, { opacity: 0.6 }]}>
-                <View style={[s.avatarCircle, { backgroundColor: Colors.border }]}>
-                  <Text style={[s.avatarText, { color: Colors.muted }]}>{emp.name.charAt(0).toUpperCase()}</Text>
+              <Pressable
+                key={emp.id}
+                onPress={() => router.push(`/employees/${emp.id}` as never)}
+                style={[
+                  s.row,
+                  {
+                    backgroundColor: colors.card,
+                    borderRadius: radius.md,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    padding: spacing.sm,
+                    gap: spacing.sm,
+                    opacity: 0.6,
+                  },
+                ]}
+              >
+                {/* Avatar — muted for inactive */}
+                <View
+                  style={[
+                    s.avatar,
+                    { backgroundColor: colors.border, borderRadius: radius.pill },
+                  ]}
+                >
+                  <Text variant="footnote" weight="600" tone="muted">
+                    {getInitials(emp.name)}
+                  </Text>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.empName}>{emp.name}</Text>
-                  <Text style={s.empPay}>{payLabel(emp)}</Text>
+                {/* Name + pay */}
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text variant="headline" weight="600">{emp.name}</Text>
+                  <Text variant="footnote" tone="muted">{payLabel(emp)}</Text>
                 </View>
-              </View>
+              </Pressable>
             ))}
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  scroll: { padding: Spacing.md, gap: 10 },
-  title: { fontSize: 22, fontWeight: '900', color: Colors.text, marginBottom: 4 },
-  sectionHeader: { fontSize: 11, fontWeight: '800', color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  card: { backgroundColor: Colors.card, borderRadius: Radius.md, padding: 12, borderWidth: 1, borderColor: Colors.border, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  avatarCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.navy, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#fff', fontSize: 16, fontWeight: '800' },
-  empName: { fontSize: 14, fontWeight: '700', color: Colors.text },
-  empPay: { fontSize: 12, color: Colors.muted, marginTop: 2 },
-  activeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99, backgroundColor: Colors.successBg ?? '#dcfce7' },
-  activeBadgeText: { fontSize: 11, fontWeight: '700', color: Colors.success },
-  empty: { textAlign: 'center', color: Colors.muted, marginTop: 8 },
+  emptyState: { alignItems: 'center', paddingVertical: 40, gap: 12 },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  avatar: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
 });
