@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider } from '../src/mobile/context/ThemeProvider';
 import { AuthProvider, useAuth } from '../src/mobile/context/AuthContext';
 import { AppStateProvider } from '../src/mobile/context/AppStateContext';
+import { useTheme } from '../src/mobile/theme';
 
 function RootRedirect() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -24,6 +25,33 @@ function RootRedirect() {
   return null;
 }
 
+function AppNavigator() {
+  const { colors } = useTheme();
+
+  return (
+    <Stack
+      screenOptions={{
+        headerLargeTitle: false,
+        headerTransparent: true,
+        headerBlurEffect: 'systemChromeMaterial',
+        headerTintColor: colors.navy,
+        headerTitleStyle: { color: colors.navy },
+        headerShadowVisible: false,
+      }}
+    >
+      <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="jobs/new" options={{ title: 'New Job', headerBackTitle: 'Jobs' }} />
+      <Stack.Screen name="jobs/[id]" options={{ title: 'Job Details', headerBackTitle: 'Jobs' }} />
+      <Stack.Screen name="timesheets/manual" options={{ title: 'Add Time Entry', headerBackTitle: 'Timesheets' }} />
+      <Stack.Screen name="invoices/new" options={{ title: 'New Invoice', headerBackTitle: 'Invoices' }} />
+      <Stack.Screen name="invoices/[id]" options={{ title: 'Invoice', headerBackTitle: 'Invoices' }} />
+      <Stack.Screen name="employees" options={{ title: 'Employees', headerBackTitle: 'More' }} />
+      <Stack.Screen name="expenses/new" options={{ title: 'New Expense', headerBackTitle: 'More' }} />
+    </Stack>
+  );
+}
+
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -31,17 +59,7 @@ export default function RootLayout() {
     <AuthProvider>
       <AppStateProvider>
       <RootRedirect />
-      <Stack>
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="jobs/new" options={{ title: 'New Job', headerBackTitle: 'Jobs' }} />
-        <Stack.Screen name="jobs/[id]" options={{ title: 'Job Details', headerBackTitle: 'Jobs' }} />
-        <Stack.Screen name="timesheets/manual" options={{ title: 'Add Time Entry', headerBackTitle: 'Timesheets' }} />
-        <Stack.Screen name="invoices/new" options={{ title: 'New Invoice', headerBackTitle: 'Invoices' }} />
-        <Stack.Screen name="invoices/[id]" options={{ title: 'Invoice', headerBackTitle: 'Invoices' }} />
-        <Stack.Screen name="employees" options={{ title: 'Employees', headerBackTitle: 'More' }} />
-        <Stack.Screen name="expenses/new" options={{ title: 'New Expense', headerBackTitle: 'More' }} />
-      </Stack>
+      <AppNavigator />
       <StatusBar style="auto" />
       </AppStateProvider>
     </AuthProvider>
