@@ -2,21 +2,33 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator, Pressable, RefreshControl,
-  SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View,
+  ScrollView, StyleSheet, Text as RNText, View,
 } from 'react-native';
 import { useApi } from '../../../src/mobile/hooks/useApi';
-import { Colors, Radius, Spacing } from '../../../src/mobile/theme';
+import { useTheme } from '../../../src/mobile/theme';
 import type { JobListItem } from '../../../src/mobile/types';
-import { formatCurrency, isActiveStatus, isCompletedStatus, isManagerOrAdmin, isOnHoldStatus, isCancelledStatus } from '../../../src/mobile/utils';
+import {
+  formatCurrency,
+  isActiveStatus,
+  isCancelledStatus,
+  isCompletedStatus,
+  isManagerOrAdmin,
+  isOnHoldStatus,
+} from '../../../src/mobile/utils';
 import { useAuth } from '../../../src/mobile/context/AuthContext';
+import { Screen } from '@/components/ui/Screen';
+import { Card } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
+import { Input } from '@/components/ui/Input';
+import { Text } from '@/components/ui/Text';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 
 type StatusFilter = 'active' | 'on-hold' | 'completed' | 'all';
 
-function statusColor(status: string | null) {
-  if (isActiveStatus(status)) return Colors.success;
-  if (isOnHoldStatus(status)) return Colors.warning;
-  if (isCompletedStatus(status)) return Colors.muted;
-  return Colors.danger;
+function statusTone(status: string | null): 'success' | 'warning' | 'neutral' {
+  if (isActiveStatus(status)) return 'success';
+  if (isOnHoldStatus(status)) return 'warning';
+  return 'neutral';
 }
 
 function matchesFilter(job: JobListItem, filter: StatusFilter): boolean {
@@ -27,10 +39,25 @@ function matchesFilter(job: JobListItem, filter: StatusFilter): boolean {
   return true;
 }
 
+const FILTER_LABELS: Record<StatusFilter, string> = {
+  active: 'Active',
+  'on-hold': 'On Hold',
+  completed: 'Completed',
+  all: 'All',
+};
+
+const FILTER_TEST_IDS: Record<StatusFilter, string> = {
+  active: 'jobs-filter-active',
+  'on-hold': 'jobs-filter-on-hold',
+  completed: 'jobs-filter-completed',
+  all: 'jobs-filter-all',
+};
+
 export default function JobsScreen() {
   const api = useApi();
   const router = useRouter();
   const { user } = useAuth();
+  const { colors, spacing, radius } = useTheme();
   const [jobs, setJobs] = useState<JobListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -55,7 +82,7 @@ export default function JobsScreen() {
       j.clientName?.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const counts = {
+  const counts: Record<StatusFilter, number> = {
     active: jobs.filter(j => isActiveStatus(j.status)).length,
     'on-hold': jobs.filter(j => isOnHoldStatus(j.status)).length,
     completed: jobs.filter(j => isCompletedStatus(j.status) || isCancelledStatus(j.status)).length,
@@ -63,109 +90,252 @@ export default function JobsScreen() {
   };
 
   if (loading) {
-    return <SafeAreaView style={s.safe}><View style={s.center}><ActivityIndicator size="large" color={Colors.navy} /></View></SafeAreaView>;
+    return (
+      <Screen headerMode="native">
+        <View style={s.center}>
+          <ActivityIndicator size="large" color={colors.navy} />
+        </View>
+      </Screen>
+    );
   }
 
+  const hasSearch = search.length > 0;
+  const isEmpty = filtered.length === 0;
+
   return (
-    <SafeAreaView style={s.safe}>
-      <View style={s.topBar}>
-        <Text style={s.title}>Jobs</Text>
-        {canManage && (
-          <Pressable style={s.addBtn} onPress={() => router.push('/jobs/new')}>
-            <Text style={s.addBtnText}>+ New Job</Text>
-          </Pressable>
-        )}
-      </View>
-
-      <View style={s.searchWrap}>
-        <TextInput
-          style={s.search}
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search jobs..."
-          placeholderTextColor={Colors.mutedLight}
-          clearButtonMode="while-editing"
-        />
-      </View>
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterBar} contentContainerStyle={s.filterRow}>
-        {(['active', 'on-hold', 'completed', 'all'] as StatusFilter[]).map(f => (
-          <Pressable key={f} style={[s.filterPill, statusFilter === f && s.filterPillActive]} onPress={() => setStatusFilter(f)}>
-            <Text style={[s.filterPillText, statusFilter === f && s.filterPillTextActive]}>
-              {f === 'active' ? 'Active' : f === 'on-hold' ? 'On Hold' : f === 'completed' ? 'Completed' : 'All'}
-              {' '}
-              <Text style={[s.filterCount, statusFilter === f && s.filterCountActive]}>{counts[f]}</Text>
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-
+    <Screen headerMode="native" padded={false}>
       <ScrollView
-        contentContainerStyle={s.scroll}
+        contentContainerStyle={{ padding: spacing.md, paddingTop: 0, gap: 10 }}
+        contentInsetAdjustmentBehavior="automatic"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
       >
-        {filtered.length === 0 && (
-          <Text style={s.empty}>{search ? 'No jobs match your search.' : 'No jobs in this category.'}</Text>
+        {/* Search box */}
+        <View style={{ paddingTop: spacing.sm }}>
+          <Input
+            leftIcon="magnifyingglass"
+            placeholder="Search jobs…"
+            value={search}
+            onChangeText={setSearch}
+            testID="jobs-search-input"
+          />
+        </View>
+
+        {/* Filter chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: spacing.sm, flexDirection: 'row', paddingVertical: 2 }}
+        >
+          {(['active', 'on-hold', 'completed', 'all'] as StatusFilter[]).map(f => {
+            const isActive = statusFilter === f;
+            return (
+              <Pressable
+                key={f}
+                testID={FILTER_TEST_IDS[f]}
+                style={[
+                  s.chip,
+                  {
+                    paddingVertical: 6,
+                    paddingHorizontal: 14,
+                    borderRadius: radius.pill,
+                    borderWidth: 1,
+                    minHeight: 44,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    flexDirection: 'row',
+                    gap: 5,
+                  },
+                  isActive
+                    ? { backgroundColor: colors.navy, borderColor: colors.navy }
+                    : { backgroundColor: colors.card, borderColor: colors.border },
+                ]}
+                onPress={() => setStatusFilter(f)}
+              >
+                <RNText
+                  style={{
+                    fontSize: 16,
+                    fontWeight: '400',
+                    lineHeight: 22,
+                    color: isActive ? colors.inverse : colors.muted,
+                  }}
+                >
+                  {FILTER_LABELS[f]}
+                </RNText>
+                <RNText
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '400',
+                    lineHeight: 16,
+                    color: isActive ? 'rgba(255,255,255,0.7)' : colors.mutedLight,
+                  }}
+                >
+                  {counts[f]}
+                </RNText>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {/* Empty state */}
+        {isEmpty && (
+          <View style={{ alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm }}>
+            <IconSymbol
+              name={hasSearch ? 'magnifyingglass' : 'briefcase'}
+              size={48}
+              color={colors.mutedLight}
+            />
+            {hasSearch ? (
+              <RNText
+                style={{
+                  fontSize: 17,
+                  fontWeight: '600',
+                  lineHeight: 23,
+                  color: colors.muted,
+                  textAlign: 'center',
+                }}
+              >
+                No jobs match your search
+              </RNText>
+            ) : (
+              <>
+                <RNText
+                  style={{
+                    fontSize: 17,
+                    fontWeight: '600',
+                    lineHeight: 23,
+                    color: colors.muted,
+                    textAlign: 'center',
+                  }}
+                >
+                  No jobs yet
+                </RNText>
+                <RNText
+                  style={{
+                    fontSize: 15,
+                    fontWeight: '400',
+                    lineHeight: 21,
+                    color: colors.mutedLight,
+                    textAlign: 'center',
+                    maxWidth: 240,
+                  }}
+                >
+                  {canManage
+                    ? 'Create your first job with + above.'
+                    : "Jobs you’re assigned to will appear here."}
+                </RNText>
+              </>
+            )}
+          </View>
         )}
-        {filtered.map(job => (
-          <Pressable key={job.id} style={s.card} onPress={() => router.push(`/jobs/${job.id}`)}>
-            <View style={s.cardTop}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.jobName}>{job.jobName ?? 'Untitled Job'}</Text>
-                {job.clientName ? <Text style={s.client}>{job.clientName}</Text> : null}
+
+        {/* Job cards */}
+        {filtered.map((job, idx) => (
+          <Pressable
+            key={job.id}
+            onPress={() => router.push(`/jobs/${job.id}`)}
+          >
+            <Card
+              elevation="sm"
+              padding="md"
+              radius="lg"
+              testID={idx === 0 ? 'jobs-card-0' : undefined}
+            >
+              {/* Top row: name + status badge */}
+              <View style={s.cardTop}>
+                <View style={{ flex: 1 }}>
+                  <Text variant="headline" weight="600" numberOfLines={2}>
+                    {job.jobName ?? 'Untitled Job'}
+                  </Text>
+                  {job.clientName ? (
+                    <Text variant="subhead" tone="muted">
+                      {job.clientName}
+                    </Text>
+                  ) : null}
+                </View>
+                <Badge
+                  tone={statusTone(job.status)}
+                  label={job.status ?? 'Active'}
+                />
               </View>
-              <View style={[s.badge, { backgroundColor: statusColor(job.status) + '20' }]}>
-                <Text style={[s.badgeText, { color: statusColor(job.status) }]}>{job.status ?? 'Active'}</Text>
-              </View>
-            </View>
-            {job.isOverhead && (
-              <View style={s.overheadTag}>
-                <Text style={s.overheadTagText}>Overhead</Text>
-              </View>
-            )}
-            {job.financials && (
-              <View style={s.financials}>
-                <Text style={s.fin}>Profit: <Text style={{ color: Number(job.financials.profit) >= 0 ? Colors.success : Colors.danger }}>{formatCurrency(job.financials.profit)}</Text></Text>
-                <Text style={s.fin}>Hours: {Number(job.financials.totalHours).toFixed(1)}</Text>
-                {Number(job.financials.unpaidInvoices) > 0 && (
-                  <Text style={[s.fin, { color: Colors.danger }]}>{job.financials.unpaidInvoices} unpaid inv.</Text>
-                )}
-              </View>
-            )}
+
+              {/* Overhead tag */}
+              {job.isOverhead ? (
+                <View style={{ marginTop: 4 }}>
+                  <Badge tone="warning" label="Overhead" size="sm" />
+                </View>
+              ) : null}
+
+              {/* Financials row — manager-gated */}
+              {job.financials && canManage ? (
+                <View
+                  style={[
+                    s.financials,
+                    {
+                      marginTop: 6,
+                      paddingTop: 6,
+                      borderTopWidth: 0.5,
+                      borderTopColor: colors.border,
+                      gap: spacing.md,
+                    },
+                  ]}
+                >
+                  {/* Profit */}
+                  <View style={s.finItem}>
+                    <RNText style={{ fontSize: 12, color: colors.muted }}>Profit</RNText>
+                    <RNText
+                      style={{
+                        fontSize: 12,
+                        fontWeight: '600',
+                        color: Number(job.financials.profit) >= 0
+                          ? colors.success
+                          : colors.danger,
+                      }}
+                    >
+                      {formatCurrency(job.financials.profit)}
+                    </RNText>
+                  </View>
+
+                  {/* Hours */}
+                  <View style={s.finItem}>
+                    <RNText style={{ fontSize: 12, color: colors.muted }}>Hours</RNText>
+                    <RNText style={{ fontSize: 12, fontWeight: '600', color: colors.muted }}>
+                      {Number(job.financials.totalHours).toFixed(1)} hrs
+                    </RNText>
+                  </View>
+
+                  {/* Unpaid invoices */}
+                  {Number(job.financials.unpaidInvoices) > 0 ? (
+                    <View style={s.finItem}>
+                      <RNText style={{ fontSize: 12, color: colors.muted }}>Unpaid</RNText>
+                      <RNText style={{ fontSize: 12, fontWeight: '600', color: colors.danger }}>
+                        {formatCurrency(job.financials.unpaidInvoices)}
+                      </RNText>
+                    </View>
+                  ) : (
+                    <View style={s.finItem}>
+                      <RNText style={{ fontSize: 12, color: colors.muted }}>Unpaid</RNText>
+                      <RNText style={{ fontSize: 12, fontWeight: '600', color: colors.muted }}>
+                        —
+                      </RNText>
+                    </View>
+                  )}
+                </View>
+              ) : null}
+            </Card>
           </Pressable>
         ))}
+
+        {/* Bottom padding */}
+        <View style={{ height: 12 }} />
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: Spacing.md, paddingBottom: 8 },
-  title: { fontSize: 22, fontWeight: '900', color: Colors.text },
-  addBtn: { backgroundColor: Colors.navy, borderRadius: Radius.md, paddingVertical: 8, paddingHorizontal: 14 },
-  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  searchWrap: { paddingHorizontal: Spacing.md, paddingBottom: 8 },
-  search: { backgroundColor: Colors.card, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.border, padding: 10, fontSize: 14, color: Colors.text },
-  filterBar: { flexGrow: 0, paddingBottom: 10 },
-  filterRow: { paddingHorizontal: Spacing.md, gap: 8, flexDirection: 'row' },
-  filterPill: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 99, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card },
-  filterPillActive: { backgroundColor: Colors.navy, borderColor: Colors.navy },
-  filterPillText: { fontSize: 13, fontWeight: '600', color: Colors.muted },
-  filterPillTextActive: { color: '#fff' },
-  filterCount: { fontSize: 12, color: Colors.mutedLight },
-  filterCountActive: { color: 'rgba(255,255,255,0.7)' },
-  scroll: { padding: Spacing.md, paddingTop: 0, gap: 10 },
-  empty: { textAlign: 'center', color: Colors.muted, marginTop: Spacing.xl },
-  card: { backgroundColor: Colors.card, borderRadius: Radius.lg, padding: 14, borderWidth: 1, borderColor: Colors.border, gap: 8 },
+  chip: {},
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  jobName: { fontSize: 15, fontWeight: '800', color: Colors.text },
-  client: { fontSize: 13, color: Colors.muted, marginTop: 2 },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99 },
-  badgeText: { fontSize: 11, fontWeight: '700' },
-  overheadTag: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 99, backgroundColor: Colors.warningBg, borderWidth: 1, borderColor: Colors.warningBorder },
-  overheadTagText: { fontSize: 10, fontWeight: '700', color: Colors.warning },
-  financials: { flexDirection: 'row', gap: 12 },
-  fin: { fontSize: 12, color: Colors.muted },
+  financials: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
+  finItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
 });
