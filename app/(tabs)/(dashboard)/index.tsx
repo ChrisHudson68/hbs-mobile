@@ -4,19 +4,31 @@ import {
   ActivityIndicator,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
+  Text as RNText,
   View,
 } from 'react-native';
 import { useAuth } from '../../../src/mobile/context/AuthContext';
 import { useAppState } from '../../../src/mobile/context/AppStateContext';
 import { useApi } from '../../../src/mobile/hooks/useApi';
-import { Colors, Radius, Spacing } from '../../../src/mobile/theme';
+import { useTheme } from '../../../src/mobile/theme';
 import type { Invoice, JobListItem, TimesheetsResponse } from '../../../src/mobile/types';
-import { buildDashboardMetrics, formatCurrency, formatDate, formatDuration, formatHours, isActiveStatus, isManagerOrAdmin } from '../../../src/mobile/utils';
+import {
+  buildDashboardMetrics,
+  formatCurrency,
+  formatDate,
+  formatDuration,
+  formatHours,
+  isActiveStatus,
+  isManagerOrAdmin,
+} from '../../../src/mobile/utils';
+import { Screen } from '@/components/ui/Screen';
+import { Text } from '@/components/ui/Text';
+import { Card } from '@/components/ui/Card';
+import { Input } from '@/components/ui/Input';
+import { ListRow } from '@/components/ui/ListRow';
+import { SectionHeader } from '@/components/ui/SectionHeader';
 
 function greeting(name: string) {
   const h = new Date().getHours();
@@ -29,6 +41,7 @@ export default function DashboardScreen() {
   const api = useApi();
   const router = useRouter();
   const { isClockedIn } = useAppState();
+  const { colors, spacing, radius } = useTheme();
 
   const [jobs, setJobs] = useState<JobListItem[]>([]);
   const [jobSearch, setJobSearch] = useState('');
@@ -82,183 +95,342 @@ export default function DashboardScreen() {
     const due = new Date(i.dueDate);
     return i.status?.toLowerCase() !== 'paid' && due < new Date();
   });
-  const unpaidTotal = invoices
-    .filter(i => i.status?.toLowerCase() !== 'paid')
-    .reduce((s, i) => s + Number(i.balance || 0), 0);
+  const unpaidInvoices = invoices.filter(i => i.status?.toLowerCase() !== 'paid');
+  const unpaidTotal = unpaidInvoices.reduce((s, i) => s + Number(i.balance || 0), 0);
 
   const hoursGoal = 40;
   const hoursPercent = Math.min(1, weekHours / hoursGoal);
 
   if (loading) {
     return (
-      <SafeAreaView style={s.safe}>
-        <View style={s.center}><ActivityIndicator size="large" color={Colors.navy} /></View>
-      </SafeAreaView>
+      <Screen headerMode="native">
+        <View style={s.center}>
+          <ActivityIndicator size="large" color={colors.navy} />
+        </View>
+      </Screen>
     );
   }
 
   return (
-    <SafeAreaView style={s.safe}>
+    <Screen headerMode="native" padded={false}>
       <ScrollView
-        contentContainerStyle={s.scroll}
+        contentContainerStyle={{ padding: spacing.md, gap: spacing.md, paddingBottom: 32 }}
+        contentInsetAdjustmentBehavior="automatic"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
       >
-        {/* Header */}
-        <View style={s.header}>
-          <Text style={s.greeting}>{greeting(user?.name ?? 'there')}</Text>
-          <Text style={s.role}>{user?.role}</Text>
-        </View>
+        {/* Role subtitle — large title owns the greeting */}
+        <Text variant="caption" tone="muted">{user?.role}</Text>
 
         {/* Job search */}
-        <View style={s.searchWrap}>
-          <TextInput
-            style={s.searchInput}
-            value={jobSearch}
-            onChangeText={setJobSearch}
-            placeholder="Search jobs..."
-            placeholderTextColor={Colors.mutedLight}
-            clearButtonMode="while-editing"
-            returnKeyType="search"
-          />
-        </View>
+        <Input
+          leftIcon="magnifyingglass"
+          placeholder="Search jobs…"
+          value={jobSearch}
+          onChangeText={setJobSearch}
+          testID="dashboard-job-search-input"
+        />
 
+        {/* Search results overlay — replaces main body while typing */}
         {searchTerm ? (
           <View style={s.section}>
-            {searchResults.length === 0
-              ? <Text style={s.empty}>No jobs match "{jobSearch}"</Text>
-              : searchResults.map(job => (
-                <Pressable key={job.id} style={s.jobCard} onPress={() => { setJobSearch(''); router.push(`/jobs/${job.id}`); }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.jobName}>{job.jobName}</Text>
-                    {job.clientName ? <Text style={s.jobClient}>{job.clientName}</Text> : null}
-                  </View>
-                  <Text style={s.jobStatus}>{job.status ?? 'Active'}</Text>
-                  <Text style={s.chevron}>›</Text>
-                </Pressable>
+            {searchResults.length === 0 ? (
+              <RNText style={{ textAlign: 'center', color: colors.muted, paddingVertical: spacing.sm, fontSize: 15 }}>
+                No jobs match "{jobSearch}"
+              </RNText>
+            ) : (
+              searchResults.map(job => (
+                <ListRow
+                  key={job.id}
+                  title={job.jobName ?? 'Untitled Job'}
+                  subtitle={job.clientName ?? undefined}
+                  trailing="chevron"
+                  onPress={() => { setJobSearch(''); router.push(`/jobs/${job.id}`); }}
+                />
               ))
-            }
+            )}
           </View>
         ) : null}
 
         {/* Main content — hidden while searching */}
         {!searchTerm && (
           <>
-            <Pressable style={activeEntry ? s.clockedInCard : s.clockBanner} onPress={() => router.push('/(tabs)/timesheets')}>
+            {/* Clock card */}
+            <Pressable
+              testID="dashboard-clock-card"
+              onPress={() => router.push('/(tabs)/timesheets')}
+              style={
+                activeEntry
+                  ? {
+                      backgroundColor: colors.navy,
+                      borderRadius: radius.lg,
+                      padding: spacing.md,
+                      alignItems: 'center',
+                      gap: 4,
+                    }
+                  : {
+                      backgroundColor: colors.card,
+                      borderRadius: radius.md,
+                      padding: spacing.md,
+                      alignItems: 'center',
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      borderStyle: 'dashed',
+                    }
+              }
+            >
               {activeEntry ? (
                 <>
-                  <Text style={s.clockedInLabel}>Currently Clocked In</Text>
-                  <Text style={s.clockedInJob}>{activeEntry.jobName ?? 'No Job'}</Text>
-                  <Text style={s.clockedInTime}>{formatDuration(elapsed)}</Text>
-                  <Text style={s.clockTapHint}>Tap to manage →</Text>
+                  <Text variant="caption" tone="inverse">CURRENTLY CLOCKED IN</Text>
+                  <Text variant="headline" tone="inverse" weight="700">{activeEntry.jobName ?? 'No Job'}</Text>
+                  <RNText
+                    testID="dashboard-clock-elapsed"
+                    style={{ color: colors.yellow, fontSize: 32, fontWeight: '900', letterSpacing: -1 }}
+                  >
+                    {formatDuration(elapsed)}
+                  </RNText>
+                  <RNText style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 4 }}>
+                    Tap to manage →
+                  </RNText>
                 </>
               ) : (
-                <Text style={s.clockBannerText}>Not clocked in — tap to clock in</Text>
+                <Text variant="callout" tone="muted">Not clocked in — tap to clock in</Text>
               )}
             </Pressable>
 
+            {/* This-Week card */}
             <View style={s.section}>
-              <Text style={s.sectionTitle}>This Week</Text>
-              <View style={s.weekCard}>
+              <Card elevation="sm" padding="md">
                 <View style={s.weekRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={s.weekHours}>{formatHours(weekHours)}</Text>
-                    <Text style={s.weekLabel}>{weekEntries} {weekEntries === 1 ? 'entry' : 'entries'}</Text>
+                    <RNText style={{ fontSize: 28, fontWeight: '900', color: colors.navy, letterSpacing: -1 }}>
+                      {formatHours(weekHours)}
+                    </RNText>
+                    <Text variant="caption" tone="muted">
+                      {weekEntries} {weekEntries === 1 ? 'entry' : 'entries'}
+                    </Text>
                   </View>
-                  <Text style={s.weekGoal}>/ {hoursGoal}h goal</Text>
+                  <Text variant="footnote" tone="muted">/ {hoursGoal}h goal</Text>
                 </View>
-                <View style={s.progressTrack}>
-                  <View style={[s.progressFill, { width: `${Math.round(hoursPercent * 100)}%` as any }]} />
+                <View style={{ height: 8, backgroundColor: colors.border, borderRadius: 4, overflow: 'hidden' }}>
+                  <View
+                    style={{
+                      height: '100%',
+                      backgroundColor: colors.yellow,
+                      borderRadius: 4,
+                      width: `${Math.round(hoursPercent * 100)}%` as any,
+                    }}
+                  />
                 </View>
-                <Text style={s.progressPct}>{Math.round(hoursPercent * 100)}% of weekly goal</Text>
-              </View>
+                <Text variant="footnote" tone="muted">{Math.round(hoursPercent * 100)}% of weekly goal</Text>
+              </Card>
             </View>
 
+            {/* Financials stat grid — manager only */}
             {canManage && (
               <View style={s.section}>
-                <Text style={s.sectionTitle}>Financials</Text>
+                <SectionHeader title="Financials" />
                 <View style={s.statsGrid}>
-                  <View style={[s.statCard, { borderTopColor: Colors.navy }]}>
-                    <Text style={s.statLabel}>Active Jobs</Text>
-                    <Text style={s.statValue}>{metrics.activeJobsCount}</Text>
+                  {/* Active Jobs */}
+                  <View style={{ flex: 1, minWidth: '45%' }}>
+                    <Card elevation="sm" padding="sm">
+                      <View
+                        style={{
+                          borderTopWidth: 3,
+                          borderTopColor: colors.navy,
+                          borderTopLeftRadius: radius.md,
+                          borderTopRightRadius: radius.md,
+                          marginTop: -spacing.sm,
+                          marginHorizontal: -spacing.sm,
+                          marginBottom: spacing.sm,
+                        }}
+                      />
+                      <RNText style={{ fontSize: 10, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                        Active Jobs
+                      </RNText>
+                      <RNText style={{ fontSize: 22, fontWeight: '900', color: colors.text, marginTop: 4, letterSpacing: -0.5 }}>
+                        {metrics.activeJobsCount}
+                      </RNText>
+                    </Card>
                   </View>
-                  <View style={[s.statCard, { borderTopColor: Colors.yellow }]}>
-                    <Text style={s.statLabel}>Total Profit</Text>
-                    <Text style={[s.statValue, { fontSize: 16 }]}>{formatCurrency(metrics.totalProfit)}</Text>
+                  {/* Total Profit */}
+                  <View style={{ flex: 1, minWidth: '45%' }}>
+                    <Card elevation="sm" padding="sm">
+                      <View
+                        style={{
+                          borderTopWidth: 3,
+                          borderTopColor: colors.yellow,
+                          borderTopLeftRadius: radius.md,
+                          borderTopRightRadius: radius.md,
+                          marginTop: -spacing.sm,
+                          marginHorizontal: -spacing.sm,
+                          marginBottom: spacing.sm,
+                        }}
+                      />
+                      <RNText style={{ fontSize: 10, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                        Total Profit
+                      </RNText>
+                      <RNText style={{ fontSize: 16, fontWeight: '900', color: colors.text, marginTop: 4, letterSpacing: -0.5 }}>
+                        {formatCurrency(metrics.totalProfit)}
+                      </RNText>
+                    </Card>
                   </View>
-                  <View style={[s.statCard, { borderTopColor: Colors.success }]}>
-                    <Text style={s.statLabel}>Collected</Text>
-                    <Text style={[s.statValue, { fontSize: 16 }]}>{formatCurrency(metrics.totalCollected)}</Text>
+                  {/* Collected */}
+                  <View style={{ flex: 1, minWidth: '45%' }}>
+                    <Card elevation="sm" padding="sm">
+                      <View
+                        style={{
+                          borderTopWidth: 3,
+                          borderTopColor: colors.success,
+                          borderTopLeftRadius: radius.md,
+                          borderTopRightRadius: radius.md,
+                          marginTop: -spacing.sm,
+                          marginHorizontal: -spacing.sm,
+                          marginBottom: spacing.sm,
+                        }}
+                      />
+                      <RNText style={{ fontSize: 10, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                        Collected
+                      </RNText>
+                      <RNText style={{ fontSize: 16, fontWeight: '900', color: colors.text, marginTop: 4, letterSpacing: -0.5 }}>
+                        {formatCurrency(metrics.totalCollected)}
+                      </RNText>
+                    </Card>
                   </View>
-                  <View style={[s.statCard, { borderTopColor: unpaidTotal > 0 ? Colors.danger : Colors.border }]}>
-                    <Text style={s.statLabel}>Unpaid</Text>
-                    <Text style={[s.statValue, { fontSize: 16, color: unpaidTotal > 0 ? Colors.danger : Colors.text }]}>
-                      {formatCurrency(unpaidTotal)}
-                    </Text>
+                  {/* Unpaid */}
+                  <View style={{ flex: 1, minWidth: '45%' }}>
+                    <Card elevation="sm" padding="sm">
+                      <View
+                        style={{
+                          borderTopWidth: 3,
+                          borderTopColor: unpaidTotal > 0 ? colors.danger : colors.border,
+                          borderTopLeftRadius: radius.md,
+                          borderTopRightRadius: radius.md,
+                          marginTop: -spacing.sm,
+                          marginHorizontal: -spacing.sm,
+                          marginBottom: spacing.sm,
+                        }}
+                      />
+                      <RNText style={{ fontSize: 10, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                        Unpaid
+                      </RNText>
+                      <RNText
+                        style={{
+                          fontSize: 16,
+                          fontWeight: '900',
+                          color: unpaidTotal > 0 ? colors.danger : colors.text,
+                          marginTop: 4,
+                          letterSpacing: -0.5,
+                        }}
+                      >
+                        {formatCurrency(unpaidTotal)}
+                      </RNText>
+                    </Card>
                   </View>
                 </View>
               </View>
             )}
 
+            {/* Overdue invoice alert banner — manager only */}
             {canManage && overdueInvoices.length > 0 && (
-              <Pressable style={s.alertBanner} onPress={() => router.push('/(tabs)/invoices')}>
-                <Text style={s.alertText}>
+              <Pressable
+                style={{
+                  backgroundColor: colors.dangerBg,
+                  borderRadius: radius.md,
+                  padding: spacing.md,
+                  borderWidth: 1,
+                  borderColor: colors.dangerBorder,
+                }}
+                onPress={() => router.push('/(tabs)/invoices')}
+              >
+                <RNText style={{ color: colors.danger, fontWeight: '600', fontSize: 13 }}>
                   {overdueInvoices.length} overdue invoice{overdueInvoices.length > 1 ? 's' : ''} · tap to review
-                </Text>
+                </RNText>
               </Pressable>
             )}
 
+            {/* Active Jobs list */}
             {recentJobs.length > 0 && (
               <View style={s.section}>
-                <View style={s.sectionRow}>
-                  <Text style={s.sectionTitle}>Active Jobs</Text>
-                  <Pressable onPress={() => router.push('/(tabs)/jobs')}>
-                    <Text style={s.sectionLink}>See all →</Text>
-                  </Pressable>
-                </View>
-                {recentJobs.map(job => (
-                  <Pressable key={job.id} style={s.jobCard} onPress={() => router.push(`/jobs/${job.id}`)}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.jobName}>{job.jobName}</Text>
-                      {job.clientName ? <Text style={s.jobClient}>{job.clientName}</Text> : null}
-                    </View>
-                    {job.financials && canManage && (
-                      <Text style={[s.jobProfit, { color: Number(job.financials.profit) >= 0 ? Colors.success : Colors.danger }]}>
-                        {formatCurrency(job.financials.profit)}
-                      </Text>
-                    )}
-                    <Text style={s.chevron}>›</Text>
-                  </Pressable>
+                <SectionHeader
+                  title="Active Jobs"
+                  action={
+                    <Pressable onPress={() => router.push('/(tabs)/jobs')}>
+                      <RNText style={{ color: colors.infoText, fontSize: 13, fontWeight: '700' }}>
+                        See all →
+                      </RNText>
+                    </Pressable>
+                  }
+                />
+                {recentJobs.map((job, idx) => (
+                  <ListRow
+                    key={job.id}
+                    title={job.jobName ?? 'Untitled Job'}
+                    subtitle={job.clientName ?? undefined}
+                    trailing={job.financials && canManage ? 'custom' : 'chevron'}
+                    trailingCustom={
+                      job.financials && canManage
+                        ? (
+                          <RNText
+                            style={{
+                              color: Number(job.financials.profit) >= 0 ? colors.success : colors.danger,
+                              fontSize: 13,
+                              fontWeight: '700',
+                            }}
+                          >
+                            {formatCurrency(job.financials.profit)}
+                          </RNText>
+                        )
+                        : undefined
+                    }
+                    onPress={() => router.push(`/jobs/${job.id}`)}
+                    testID={idx === 0 ? 'dashboard-active-job-row-0' : undefined}
+                  />
                 ))}
               </View>
             )}
 
-            {canManage && invoices.filter(i => i.status?.toLowerCase() !== 'paid').length > 0 && (
+            {/* Open Invoices — manager only */}
+            {canManage && unpaidInvoices.length > 0 && (
               <View style={s.section}>
-                <View style={s.sectionRow}>
-                  <Text style={s.sectionTitle}>Open Invoices</Text>
-                  <Pressable onPress={() => router.push('/(tabs)/invoices')}>
-                    <Text style={s.sectionLink}>See all →</Text>
-                  </Pressable>
-                </View>
-                {invoices
-                  .filter(i => i.status?.toLowerCase() !== 'paid')
+                <SectionHeader
+                  title="Open Invoices"
+                  action={
+                    <Pressable onPress={() => router.push('/(tabs)/invoices')}>
+                      <RNText style={{ color: colors.infoText, fontSize: 13, fontWeight: '700' }}>
+                        See all →
+                      </RNText>
+                    </Pressable>
+                  }
+                />
+                {unpaidInvoices
                   .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
                   .slice(0, 3)
                   .map(inv => {
                     const overdue = new Date(inv.dueDate) < new Date();
                     return (
-                      <Pressable key={inv.id} style={s.invCard} onPress={() => router.push(`/invoices/${inv.id}`)}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={s.invNum}>{inv.invoiceNumber ?? `Invoice #${inv.id}`}</Text>
-                          <Text style={s.invJob}>{inv.jobName ?? '—'}</Text>
-                        </View>
-                        <View style={{ alignItems: 'flex-end', gap: 2 }}>
-                          <Text style={s.invAmount}>{formatCurrency(inv.balance)}</Text>
-                          <Text style={[s.invDue, overdue && { color: Colors.danger }]}>
-                            {overdue ? 'Overdue' : `Due ${formatDate(inv.dueDate)}`}
-                          </Text>
-                        </View>
-                      </Pressable>
+                      <Card key={inv.id} elevation="none" padding="md">
+                        <Pressable
+                          style={s.invRow}
+                          onPress={() => router.push(`/invoices/${inv.id}`)}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text variant="headline" weight="600">
+                              {inv.invoiceNumber ?? `Invoice #${inv.id}`}
+                            </Text>
+                            <Text variant="caption" tone="muted">{inv.jobName ?? '—'}</Text>
+                          </View>
+                          <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                            <Text variant="headline" weight="700">
+                              {formatCurrency(inv.balance)}
+                            </Text>
+                            <RNText
+                              style={{ fontSize: 11, fontWeight: '600', color: overdue ? colors.danger : colors.muted }}
+                            >
+                              {overdue ? 'Overdue' : `Due ${formatDate(inv.dueDate)}`}
+                            </RNText>
+                          </View>
+                        </Pressable>
+                      </Card>
                     );
                   })}
               </View>
@@ -266,117 +438,14 @@ export default function DashboardScreen() {
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.bg },
-  scroll: { padding: Spacing.md, gap: Spacing.md, paddingBottom: 32 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-
-  header: { gap: 2, paddingTop: 4 },
-  greeting: { fontSize: 24, fontWeight: '900', color: Colors.text, letterSpacing: -0.5 },
-  role: { fontSize: 13, color: Colors.muted, textTransform: 'capitalize' },
-
-  clockedInCard: {
-    backgroundColor: Colors.navy,
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
-    alignItems: 'center',
-    gap: 4,
-  },
-  clockedInLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  clockedInJob: { color: '#fff', fontSize: 17, fontWeight: '800' },
-  clockedInTime: { color: Colors.yellow, fontSize: 32, fontWeight: '900', letterSpacing: -1 },
-  clockTapHint: { color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 4 },
-
-  clockBanner: {
-    backgroundColor: Colors.card,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderStyle: 'dashed',
-  },
-  clockBannerText: { color: Colors.muted, fontSize: 14, fontWeight: '600' },
-
   section: { gap: 8 },
-  sectionTitle: { fontSize: 11, fontWeight: '800', color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.6 },
-  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sectionLink: { fontSize: 13, color: Colors.infoText, fontWeight: '700' },
-
-  weekCard: {
-    backgroundColor: Colors.card,
-    borderRadius: Radius.lg,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 10,
-  },
-  weekRow: { flexDirection: 'row', alignItems: 'flex-end' },
-  weekHours: { fontSize: 28, fontWeight: '900', color: Colors.navy, letterSpacing: -1 },
-  weekLabel: { fontSize: 12, color: Colors.muted, marginTop: 2 },
-  weekGoal: { fontSize: 13, color: Colors.mutedLight, fontWeight: '600' },
-  progressTrack: { height: 8, backgroundColor: Colors.border, borderRadius: 4, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: Colors.navy, borderRadius: 4 },
-  progressPct: { fontSize: 11, color: Colors.muted },
-
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  statCard: { flex: 1, minWidth: '45%', backgroundColor: Colors.card, borderRadius: Radius.md, padding: 14, borderTopWidth: 3, borderTopColor: Colors.border, borderWidth: 1, borderColor: Colors.border },
-  statLabel: { fontSize: 10, fontWeight: '700', color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.4 },
-  statValue: { fontSize: 22, fontWeight: '900', color: Colors.text, marginTop: 4, letterSpacing: -0.5 },
-
-  alertBanner: {
-    backgroundColor: Colors.dangerBg,
-    borderRadius: Radius.md,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: Colors.dangerBorder,
-  },
-  alertText: { color: Colors.danger, fontWeight: '700', fontSize: 13 },
-
-  jobCard: {
-    backgroundColor: Colors.card,
-    borderRadius: Radius.md,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  jobName: { fontSize: 14, fontWeight: '800', color: Colors.text },
-  jobClient: { fontSize: 12, color: Colors.muted, marginTop: 1 },
-  jobProfit: { fontSize: 13, fontWeight: '700' },
-  chevron: { fontSize: 20, color: Colors.mutedLight },
-
-  invCard: {
-    backgroundColor: Colors.card,
-    borderRadius: Radius.md,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  invNum: { fontSize: 14, fontWeight: '800', color: Colors.text },
-  invJob: { fontSize: 12, color: Colors.muted, marginTop: 1 },
-  invAmount: { fontSize: 14, fontWeight: '900', color: Colors.text },
-  invDue: { fontSize: 11, color: Colors.muted, fontWeight: '600' },
-
-  searchWrap: { marginTop: -4 },
-  searchInput: {
-    backgroundColor: Colors.card,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 10,
-    fontSize: 14,
-    color: Colors.text,
-  },
-  jobStatus: { fontSize: 11, color: Colors.muted, fontWeight: '600' },
-  empty: { textAlign: 'center', color: Colors.muted, paddingVertical: 8 },
+  weekRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 10 },
+  invRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 });
