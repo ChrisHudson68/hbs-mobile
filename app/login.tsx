@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -20,6 +21,7 @@ export default function LoginScreen() {
   const { login } = useAuth();
   const biometrics = useBiometrics();
   const { colors, spacing, radius, elevation } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [subdomain, setSubdomain] = useState('');
   const [email, setEmail] = useState('');
@@ -207,22 +209,35 @@ export default function LoginScreen() {
       {helpOpen ? (
         <Sheet
           onClose={() => setHelpOpen(false)}
-          snapPoints={['40%']}
+          snapPoints={['52%']}
+          scrollable
           header={
             <Text variant="title2" weight="700">
               Trouble signing in?
             </Text>
           }
         >
-          <View style={{ gap: spacing.md, paddingTop: spacing.md }}>
-            <Text variant="body" tone="muted">
-              Your company code, email, and password come from your office. If
-              you&apos;re locked out or unsure, your manager can confirm them.
-            </Text>
-            <Text variant="body" tone="muted">
-              Call your office and ask for your Hudson Business Solutions login
-              details. There is no self-service password reset in the app.
-            </Text>
+          <View style={[s.helpContent, { gap: spacing.lg, paddingTop: spacing.md, paddingBottom: insets.bottom + spacing.lg }]}>
+            <View style={{ gap: spacing.md }}>
+              <Text variant="body" tone="muted">
+                Your company code, email, and password come from your office. If
+                you&apos;re locked out or unsure, your manager can confirm them.
+              </Text>
+              <Text variant="body" tone="muted">
+                Call your office and ask for your Hudson Business Solutions login
+                details. There is no self-service password reset in the app.
+              </Text>
+            </View>
+
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              label="Got it"
+              haptic="selection"
+              onPress={() => setHelpOpen(false)}
+              testID="login-help-dismiss"
+            />
           </View>
         </Sheet>
       ) : null}
@@ -254,4 +269,8 @@ const s = StyleSheet.create({
   },
   form: {},
   actions: {},
+  // Help sheet content: paragraphs then a full-width "Got it" button, stacked
+  // with a gap. Scrollable (Sheet `scrollable`) so all content stays reachable
+  // on smaller iPhones; bottom padding clears the home indicator.
+  helpContent: {},
 });

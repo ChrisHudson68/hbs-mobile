@@ -47,7 +47,10 @@ export function Sheet({
   children,
   testID,
 }: SheetProps) {
-  const { colors } = useTheme();
+  const { colors, spacing } = useTheme();
+
+  // Comfortable horizontal gutters for all sheet content (token-driven).
+  const contentPadding = { paddingHorizontal: spacing.lg };
 
   function handleChange(index: number) {
     if (index === -1) {
@@ -85,12 +88,12 @@ export function Sheet({
       }}
     >
       {scrollable ? (
-        <BottomSheetScrollView testID={testID} contentContainerStyle={s.scrollContent}>
+        <BottomSheetScrollView testID={testID} contentContainerStyle={[s.scrollContent, contentPadding]}>
           {headerNode}
           {children}
         </BottomSheetScrollView>
       ) : (
-        <BottomSheetView testID={testID} style={s.viewContent}>
+        <BottomSheetView testID={testID} style={[s.viewContent, contentPadding]}>
           {headerNode}
           {children}
         </BottomSheetView>
