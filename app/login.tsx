@@ -26,6 +26,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Inline field-level errors (D-04) — replace the old Alert.alert popups.
   const [subdomainError, setSubdomainError] = useState<string | undefined>();
@@ -87,7 +88,8 @@ export default function LoginScreen() {
     if (subdomainError) setSubdomainError(undefined);
   };
   const onChangeEmail = (v: string) => {
-    setEmail(v);
+    // Force lowercase as the user types (the submit-time trim().toLowerCase() stays).
+    setEmail(v.toLowerCase());
     if (emailError) setEmailError(undefined);
   };
   const onChangePassword = (v: string) => {
@@ -127,6 +129,8 @@ export default function LoginScreen() {
               value={subdomain}
               onChangeText={onChangeSubdomain}
               error={subdomainError}
+              autoCapitalize="none"
+              autoCorrect={false}
               placeholder="hudson"
               editable={!loading}
               testID="login-subdomain-input"
@@ -138,6 +142,8 @@ export default function LoginScreen() {
               onChangeText={onChangeEmail}
               error={emailError}
               keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
               placeholder="you@company.com"
               editable={!loading}
               testID="login-email-input"
@@ -145,10 +151,16 @@ export default function LoginScreen() {
             <Input
               label="Password"
               leftIcon="lock"
+              rightIcon={showPassword ? 'eye.slash' : 'eye'}
+              onRightIconPress={() => setShowPassword((prev) => !prev)}
+              rightIconAccessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+              rightIconTestID="login-password-toggle"
               value={password}
               onChangeText={onChangePassword}
               error={passwordError}
-              secureTextEntry
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
               placeholder="Password"
               editable={!loading}
               testID="login-password-input"
