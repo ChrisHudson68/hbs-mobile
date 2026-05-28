@@ -2,12 +2,12 @@ import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import { useAuth } from '../../src/mobile/context/AuthContext';
-import { useAppState } from '../../src/mobile/context/AppStateContext';
-import { useBiometrics } from '../../src/mobile/hooks/useBiometrics';
-import { cancelWeeklySummaryNotification, scheduleWeeklySummaryNotification } from '../../src/mobile/notifications';
-import { Colors, Radius, Spacing } from '../../src/mobile/theme';
-import { isManagerOrAdmin } from '../../src/mobile/utils';
+import { useAuth } from '../../../src/mobile/context/AuthContext';
+import { useAppState } from '../../../src/mobile/context/AppStateContext';
+import { useBiometrics } from '../../../src/mobile/hooks/useBiometrics';
+import { cancelWeeklySummaryNotification, scheduleWeeklySummaryNotification } from '../../../src/mobile/notifications';
+import { Colors, Radius, Spacing } from '../../../src/mobile/theme';
+import { isManagerOrAdmin } from '../../../src/mobile/utils';
 
 type MenuItem = { label: string; sub: string; path: string; managerOnly?: boolean };
 

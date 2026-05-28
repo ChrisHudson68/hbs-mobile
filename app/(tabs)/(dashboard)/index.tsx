@@ -11,12 +11,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useAuth } from '../../src/mobile/context/AuthContext';
-import { useAppState } from '../../src/mobile/context/AppStateContext';
-import { useApi } from '../../src/mobile/hooks/useApi';
-import { Colors, Radius, Spacing } from '../../src/mobile/theme';
-import type { Invoice, JobListItem, TimesheetsResponse } from '../../src/mobile/types';
-import { buildDashboardMetrics, formatCurrency, formatDate, formatDuration, formatHours, isActiveStatus, isManagerOrAdmin } from '../../src/mobile/utils';
+import { useAuth } from '../../../src/mobile/context/AuthContext';
+import { useAppState } from '../../../src/mobile/context/AppStateContext';
+import { useApi } from '../../../src/mobile/hooks/useApi';
+import { Colors, Radius, Spacing } from '../../../src/mobile/theme';
+import type { Invoice, JobListItem, TimesheetsResponse } from '../../../src/mobile/types';
+import { buildDashboardMetrics, formatCurrency, formatDate, formatDuration, formatHours, isActiveStatus, isManagerOrAdmin } from '../../../src/mobile/utils';
 
 function greeting(name: string) {
   const h = new Date().getHours();
