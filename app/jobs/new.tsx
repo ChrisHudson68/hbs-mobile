@@ -32,6 +32,7 @@ export default function NewJobScreen() {
   const [jobDescription, setJobDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(isEditing);
+  const [jobNameError, setJobNameError] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!editId) return;
@@ -51,7 +52,8 @@ export default function NewJobScreen() {
   }, [editId, api]);
 
   const handleSave = async () => {
-    if (!jobName.trim()) { Alert.alert('Required', 'Job name is required.'); return; }
+    if (!jobName.trim()) { setJobNameError('Job name is required'); return; }
+    setJobNameError(undefined);
     setSaving(true);
     try {
       const args = {
@@ -105,7 +107,8 @@ export default function NewJobScreen() {
         <Input
           label="Job Name"
           value={jobName}
-          onChangeText={setJobName}
+          onChangeText={(v) => { setJobName(v); if (jobNameError) setJobNameError(undefined); }}
+          error={jobNameError}
           leftIcon="briefcase"
           placeholder="e.g. Kitchen Remodel"
           testID="newjob-name-input"
