@@ -32,6 +32,9 @@ export const Colors = {
   blueprintGrid: 'rgba(30,58,95,0.05)',
   blueprintWashTop: '#FFFFFF',
   blueprintWashBottom: '#E4E9F2',
+  // Additive (Phase 2 / 02-02) — Login headline color (sketch .light .title).
+  // Slightly deeper than `navy`, so a dedicated token rather than an alias.
+  headline: '#13294A',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -70,6 +73,8 @@ export const DarkColors = {
   blueprintGrid: 'rgba(255,255,255,0.034)',
   blueprintWashTop: '#24477A',
   blueprintWashBottom: '#081120',
+  // Dark headline = white (sketch .dark .title), sibling of light `headline`.
+  headline: '#FFFFFF',
 } as const;
 
 export const Spacing = {
@@ -110,6 +115,12 @@ export const Elevation = {
   sm: { shadowColor: '#000000', shadowOpacity: 0.06, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 0 },
   md: { shadowColor: '#000000', shadowOpacity: 0.1, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 0 },
   lg: { shadowColor: '#000000', shadowOpacity: 0.15, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 0 },
+  // Additive (Phase 2 / 02-02) — yellow CTA glow (sketch .cta box-shadow:
+  // 0 14px 30px -10px rgba(245,158,11,.5)). RN has no shadow spread, so the
+  // negative spread is dropped; shadowColor references the brand yellow so the
+  // Login CTA never carries a raw shadow hex. Appearance-independent (one preset
+  // serves both skins). `Colors.yellow` === `DarkColors.yellow` (brand stable).
+  glowYellow: { shadowColor: Colors.yellow, shadowOpacity: 0.5, shadowRadius: 30, shadowOffset: { width: 0, height: 14 }, elevation: 0 },
 } as const;
 
 // Motion tokens — DEFINED in Phase 1, wired to components in Phase 6.

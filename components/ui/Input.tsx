@@ -29,6 +29,8 @@ type InputProps = {
   onChangeText: (v: string) => void;
   /** Renders below in danger tone, footnote variant, 1 line max. */
   error?: string;
+  /** Optional 1-line helper below the field (muted footnote). Hidden when `error` is set (error wins). */
+  helper?: string;
   leftIcon?: SFSymbolName;
   rightIcon?: SFSymbolName;
   secureTextEntry?: boolean;
@@ -51,6 +53,7 @@ export function Input({
   value,
   onChangeText,
   error,
+  helper,
   leftIcon,
   rightIcon,
   secureTextEntry = false,
@@ -121,6 +124,10 @@ export function Input({
       {hasError ? (
         <Text variant="footnote" tone="danger" numberOfLines={1}>
           {error}
+        </Text>
+      ) : helper ? (
+        <Text variant="footnote" tone="muted" numberOfLines={1}>
+          {helper}
         </Text>
       ) : null}
     </View>
