@@ -27,6 +27,49 @@ export const Colors = {
   cardElevated: '#FFFFFF',
   divider: '#E2E8F2',
   inverse: '#FFFFFF',
+  // Additive (Phase 2 / 02-01) — Login blueprint backdrop tokens (light skin).
+  // grid hairline, radial-wash endpoints. Dark siblings live in DarkColors.
+  blueprintGrid: 'rgba(30,58,95,0.05)',
+  blueprintWashTop: '#FFFFFF',
+  blueprintWashBottom: '#E4E9F2',
+} as const;
+
+// ---------------------------------------------------------------------------
+// Phase 2 (02-01) additive — DARK palette. A full sibling of `Colors` with the
+// IDENTICAL key set, dark-appropriate values pulled from the locked sketch
+// (.planning/sketches/02-login-field-modes.html `.dark` block) + RESEARCH §2a.
+// Brand identity (yellow / yellowDark) is intentionally stable across skins.
+// `Colors` is unchanged and remains the LIGHT palette.
+// ---------------------------------------------------------------------------
+export const DarkColors = {
+  navy: '#6E92C6',
+  navyDark: '#4A6FA0',
+  yellow: '#F59E0B',
+  yellowDark: '#D97706',
+  bg: '#0F2138',
+  card: '#16294A',
+  border: '#314E78',
+  text: '#FFFFFF',
+  muted: '#6E87AB',
+  mutedLight: '#5A6E8F',
+  success: '#4ADE80',
+  successBg: '#16301F',
+  successBorder: '#2F5A3E',
+  danger: '#FF7A7A',
+  dangerBg: '#3A1F26',
+  dangerBorder: '#6E3B42',
+  warning: '#FBBF24',
+  warningBg: '#33270D',
+  warningBorder: '#5C461A',
+  infoBg: '#16294A',
+  infoBorder: '#314E78',
+  infoText: '#8DB0E0',
+  cardElevated: '#1C355C',
+  divider: '#314E78',
+  inverse: '#0F172A',
+  blueprintGrid: 'rgba(255,255,255,0.034)',
+  blueprintWashTop: '#24477A',
+  blueprintWashBottom: '#081120',
 } as const;
 
 export const Spacing = {
@@ -93,10 +136,13 @@ export const IOSTypeRamp = {
   caption: { fontSize: 12, fontWeight: '400' as const, lineHeight: 16 },
 } as const;
 
-// Single stable module-level Theme object. Per D-03: declared at module scope,
-// never created inside a hook/component, so React Compiler keeps it stable.
-// Grouped shape supports a future dark-mode Provider without changing consumers.
-export const Theme = {
+// Two stable module-level theme objects (Phase 2 / 02-01). Per D-03: declared at
+// module scope, never created inside a hook/component, so React Compiler keeps
+// them referentially stable. The ThemeProvider (02-02 wiring) SELECTS one of
+// these by OS appearance — it never builds a new theme object per render.
+// spacing / radius / typographyRamp / elevation / motion are appearance-
+// independent and reused across both skins.
+export const LightTheme = {
   colors: Colors,
   spacing: Spacing,
   radius: Radius,
@@ -105,9 +151,24 @@ export const Theme = {
   motion: Motion,
 } as const;
 
-// Thin React Context reader. Default value = the module-level Theme const.
-// No runtime theme-switching Provider in Phase 1 (the shape supports it later).
-const ThemeContext = createContext<typeof Theme>(Theme);
+export const DarkTheme = {
+  colors: DarkColors,
+  spacing: Spacing,
+  radius: Radius,
+  typographyRamp: IOSTypeRamp,
+  elevation: Elevation,
+  motion: Motion,
+} as const;
+
+// `Theme` stays exported as an alias of `LightTheme` so any existing importer
+// (Phase 1 consumers) keeps working byte-for-byte — additive, no break.
+export const Theme = LightTheme;
+
+// Thin React Context reader. Default value = LightTheme (so consumers rendered
+// OUTSIDE the provider still resolve to a valid theme, preserving the Phase 1
+// useTheme() contract). The provider supplies the appearance-selected value.
+// Exported so the ThemeProvider can be the single source of truth (02-01-2).
+export const ThemeContext = createContext<typeof LightTheme>(LightTheme);
 
 export function useTheme() {
   return useContext(ThemeContext);
