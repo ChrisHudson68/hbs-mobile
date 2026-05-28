@@ -164,11 +164,16 @@ export const DarkTheme = {
 // (Phase 1 consumers) keeps working byte-for-byte — additive, no break.
 export const Theme = LightTheme;
 
+// Shared theme value type — the appearance-selected value is one of the two
+// module-scope constants. Both have an IDENTICAL key set (verified parity), so
+// consumers reading `colors.*` / `spacing.*` resolve cleanly on either skin.
+export type ThemeValue = typeof LightTheme | typeof DarkTheme;
+
 // Thin React Context reader. Default value = LightTheme (so consumers rendered
 // OUTSIDE the provider still resolve to a valid theme, preserving the Phase 1
 // useTheme() contract). The provider supplies the appearance-selected value.
 // Exported so the ThemeProvider can be the single source of truth (02-01-2).
-export const ThemeContext = createContext<typeof LightTheme>(LightTheme);
+export const ThemeContext = createContext<ThemeValue>(LightTheme);
 
 export function useTheme() {
   return useContext(ThemeContext);
