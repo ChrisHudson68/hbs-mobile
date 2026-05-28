@@ -18,6 +18,13 @@ export type SheetProps = {
   header?: ReactNode;
   /** When true, content scrolls via BottomSheetScrollView; else BottomSheetView. */
   scrollable?: boolean;
+  /**
+   * When true, the sheet auto-sizes to its content height (no fixed detent).
+   * Use for short, static content (e.g. a help/confirm sheet) so the panel hugs
+   * its content instead of leaving empty space below. Ignores `snapPoints` and
+   * forces the non-scroll BottomSheetView (dynamic sizing measures its content).
+   */
+  fitContent?: boolean;
   children: ReactNode;
   testID?: string;
 };
@@ -44,10 +51,18 @@ export function Sheet({
   initialIndex = 0,
   header,
   scrollable = false,
+  fitContent = false,
   children,
   testID,
 }: SheetProps) {
   const { colors, spacing } = useTheme();
+
+  // Content-hugging mode: gorhom sizes the panel to its content. Omit the
+  // percentage snapPoints (they would fight dynamic sizing) and use the
+  // measurable BottomSheetView rather than a scroll view.
+  const dynamic = fitContent === true;
+  const useScroll = scrollable && !dynamic;
+  const resolvedSnapPoints = dynamic ? undefined : snapPoints;
 
   // Comfortable horizontal gutters for all sheet content (token-driven).
   const contentPadding = { paddingHorizontal: spacing.lg };
@@ -75,10 +90,10 @@ export function Sheet({
   return (
     <BottomSheet
       index={initialIndex}
-      snapPoints={snapPoints}
+      snapPoints={resolvedSnapPoints}
       onChange={handleChange}
       enablePanDownToClose
-      enableDynamicSizing={false}
+      enableDynamicSizing={dynamic}
       backdropComponent={renderBackdrop}
       backgroundStyle={{ backgroundColor: colors.card }}
       handleIndicatorStyle={{
@@ -87,13 +102,13 @@ export function Sheet({
         backgroundColor: colors.border,
       }}
     >
-      {scrollable ? (
+      {useScroll ? (
         <BottomSheetScrollView testID={testID} contentContainerStyle={[s.scrollContent, contentPadding]}>
           {headerNode}
           {children}
         </BottomSheetScrollView>
       ) : (
-        <BottomSheetView testID={testID} style={[s.viewContent, contentPadding]}>
+        <BottomSheetView testID={testID} style={[dynamic ? null : s.viewContent, contentPadding]}>
           {headerNode}
           {children}
         </BottomSheetView>

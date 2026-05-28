@@ -209,8 +209,7 @@ export default function LoginScreen() {
       {helpOpen ? (
         <Sheet
           onClose={() => setHelpOpen(false)}
-          snapPoints={['52%']}
-          scrollable
+          fitContent
           header={
             <Text variant="title2" weight="700">
               Trouble signing in?
