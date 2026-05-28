@@ -2,9 +2,11 @@ import { SymbolViewProps } from 'expo-symbols';
 import { useState } from 'react';
 import {
   KeyboardTypeOptions,
+  Pressable,
   ReturnKeyTypeOptions,
   StyleSheet,
   TextInput,
+  TextInputProps,
   View,
   ViewStyle,
 } from 'react-native';
@@ -21,6 +23,8 @@ type SFSymbolName = SymbolViewProps['name'];
 const BORDER_WIDTH_DEFAULT = 1;
 const BORDER_WIDTH_ACTIVE = 2;
 const ICON_SIZE = 20;
+// HIG minimum touch target (pt) for the pressable right icon.
+const RIGHT_ICON_HIT_TARGET = 44;
 
 type InputProps = {
   /** Renders above the field in Text variant="footnote". */
@@ -33,9 +37,19 @@ type InputProps = {
   helper?: string;
   leftIcon?: SFSymbolName;
   rightIcon?: SFSymbolName;
+  /** When set, the right icon becomes a tappable button (e.g. password show/hide). */
+  onRightIconPress?: () => void;
+  /** accessibilityLabel for the pressable right icon (required when onRightIconPress is set). */
+  rightIconAccessibilityLabel?: string;
+  /** testID for the pressable right icon button. */
+  rightIconTestID?: string;
   secureTextEntry?: boolean;
   keyboardType?: KeyboardTypeOptions;
   returnKeyType?: ReturnKeyTypeOptions;
+  /** Passthrough to the underlying TextInput. Defaults to RN's default ('sentences'). */
+  autoCapitalize?: TextInputProps['autoCapitalize'];
+  /** Passthrough to the underlying TextInput. Defaults to RN's default (true). */
+  autoCorrect?: TextInputProps['autoCorrect'];
   placeholder?: string;
   editable?: boolean;
   testID?: string;
@@ -56,9 +70,14 @@ export function Input({
   helper,
   leftIcon,
   rightIcon,
+  onRightIconPress,
+  rightIconAccessibilityLabel,
+  rightIconTestID,
   secureTextEntry = false,
   keyboardType = 'default',
   returnKeyType = 'done',
+  autoCapitalize,
+  autoCorrect,
   placeholder,
   editable = true,
   testID,
@@ -113,10 +132,23 @@ export function Input({
           secureTextEntry={secureTextEntry}
           keyboardType={keyboardType}
           returnKeyType={returnKeyType}
+          autoCapitalize={autoCapitalize}
+          autoCorrect={autoCorrect}
           editable={editable}
           testID={testID}
         />
-        {rightIcon ? (
+        {rightIcon && onRightIconPress ? (
+          <Pressable
+            onPress={onRightIconPress}
+            accessibilityRole="button"
+            accessibilityLabel={rightIconAccessibilityLabel}
+            hitSlop={s.rightIconHitSlop}
+            style={s.rightIconButton}
+            testID={rightIconTestID}
+          >
+            <IconSymbol name={rightIcon as never} size={ICON_SIZE} color={colors.muted} />
+          </Pressable>
+        ) : rightIcon ? (
           <IconSymbol name={rightIcon as never} size={ICON_SIZE} color={colors.muted} />
         ) : null}
       </View>
@@ -142,5 +174,17 @@ const s = StyleSheet.create({
   },
   input: {
     flex: 1,
+  },
+  rightIconButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: RIGHT_ICON_HIT_TARGET,
+    minHeight: RIGHT_ICON_HIT_TARGET,
+  },
+  rightIconHitSlop: {
+    top: (RIGHT_ICON_HIT_TARGET - ICON_SIZE) / 2,
+    bottom: (RIGHT_ICON_HIT_TARGET - ICON_SIZE) / 2,
+    left: (RIGHT_ICON_HIT_TARGET - ICON_SIZE) / 2,
+    right: (RIGHT_ICON_HIT_TARGET - ICON_SIZE) / 2,
   },
 });
