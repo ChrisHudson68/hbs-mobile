@@ -100,7 +100,8 @@ export default function LoginScreen() {
   };
 
   return (
-    <Screen scroll keyboardAvoiding padded={false} background="bg">
+    <View style={s.host}>
+      <Screen scroll keyboardAvoiding padded={false} background="bg">
       <View style={s.root}>
         <LoginBackdrop />
 
@@ -205,6 +206,7 @@ export default function LoginScreen() {
           </View>
         </View>
       </View>
+      </Screen>
 
       {helpOpen ? (
         <Sheet
@@ -240,11 +242,14 @@ export default function LoginScreen() {
           </View>
         </Sheet>
       ) : null}
-    </Screen>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
+  // Full-screen host so the help Sheet (sibling of Screen, not inside its
+  // ScrollView) overlays the whole screen and rises from the device bottom.
+  host: { flex: 1 },
   root: {
     flexGrow: 1,
     minHeight: '100%',
