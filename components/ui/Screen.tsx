@@ -67,7 +67,7 @@ export function Screen({
       style={s.flex}
       contentContainerStyle={contentPadding}
       keyboardShouldPersistTaps="handled"
-      {...(isNativeHeader ? { contentInsetAdjustmentBehavior: 'automatic' as const } : {})}
+      contentInsetAdjustmentBehavior={isNativeHeader ? 'automatic' : 'never'}
     >
       {children}
     </ScrollView>

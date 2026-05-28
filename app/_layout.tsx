@@ -35,7 +35,6 @@ function AppNavigator() {
         headerTransparent: true,
         headerBlurEffect: 'systemChromeMaterial',
         headerTintColor: colors.navy,
-        headerTitleStyle: { color: colors.navy },
         headerShadowVisible: false,
       }}
     >
@@ -46,7 +45,7 @@ function AppNavigator() {
       <Stack.Screen name="timesheets/manual" options={{ title: 'Add Time Entry', headerBackTitle: 'Timesheets' }} />
       <Stack.Screen name="invoices/new" options={{ title: 'New Invoice', headerBackTitle: 'Invoices' }} />
       <Stack.Screen name="invoices/[id]" options={{ title: 'Invoice', headerBackTitle: 'Invoices' }} />
-      <Stack.Screen name="employees" options={{ title: 'Employees', headerBackTitle: 'More' }} />
+      <Stack.Screen name="employees" options={{ title: 'Employees', headerLargeTitle: true, headerBackTitle: 'More' }} />
       <Stack.Screen name="expenses/new" options={{ title: 'New Expense', headerBackTitle: 'More' }} />
     </Stack>
   );
