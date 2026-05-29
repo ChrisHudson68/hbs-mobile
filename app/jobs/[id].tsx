@@ -2,7 +2,7 @@ import SegmentedControl from '@react-native-segmented-control/segmented-control'
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Modal, Pressable, RefreshControl,
+  ActivityIndicator, Alert, Pressable, RefreshControl,
   ScrollView, StyleSheet, Text as RNText, View,
 } from 'react-native';
 import { useApi } from '../../src/mobile/hooks/useApi';
@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { ListRow } from '@/components/ui/ListRow';
+import { Sheet } from '@/components/ui/Sheet';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
 type Tab = 'overview' | 'income' | 'expenses' | 'time';
@@ -29,6 +30,38 @@ function statusTone(status: string | null): 'success' | 'warning' | 'neutral' {
   if (isActiveStatus(status)) return 'success';
   if (status === 'On Hold') return 'warning';
   return 'neutral';
+}
+
+// Standard Cancel/Save sheet header (Pattern A — D-04).
+function SheetHeader({
+  title,
+  onCancel,
+  onSave,
+  saveLabel = 'Save',
+  loading = false,
+}: {
+  title: string;
+  onCancel: () => void;
+  onSave: () => void;
+  saveLabel?: string;
+  loading?: boolean;
+}) {
+  const { spacing } = useTheme();
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        minHeight: 44,
+        marginBottom: spacing.sm,
+      }}
+    >
+      <Button variant="ghost" size="sm" label="Cancel" onPress={onCancel} />
+      <Text variant="headline" weight="600">{title}</Text>
+      <Button variant="primary" size="sm" label={saveLabel} onPress={onSave} loading={loading} />
+    </View>
+  );
 }
 
 export default function JobDetailScreen() {
@@ -50,17 +83,19 @@ export default function JobDetailScreen() {
 
   const [statusSaving, setStatusSaving] = useState(false);
 
-  const [editExpense, setEditExpense] = useState<JobExpense | null>(null);
+  const [editExpenseEntry, setEditExpenseEntry] = useState<JobExpense | null>(null);
   const [expCategory, setExpCategory] = useState('');
   const [expVendor, setExpVendor] = useState('');
   const [expAmount, setExpAmount] = useState('');
   const [expDate, setExpDate] = useState('');
   const [expSaving, setExpSaving] = useState(false);
+  const [expAmountError, setExpAmountError] = useState<string | undefined>(undefined);
 
   const [editTimeEntry, setEditTimeEntry] = useState<JobTimeEntry | null>(null);
   const [timeEditHours, setTimeEditHours] = useState('');
   const [timeEditNote, setTimeEditNote] = useState('');
   const [timeEditSaving, setTimeEditSaving] = useState(false);
+  const [timeEditHoursError, setTimeEditHoursError] = useState<string | undefined>(undefined);
 
   const [addingIncome, setAddingIncome] = useState(false);
   const [incomeAmount, setIncomeAmount] = useState('');
@@ -121,26 +156,31 @@ export default function JobDetailScreen() {
   };
 
   const openEditExpense = (exp: JobExpense) => {
-    setEditExpense(exp);
+    setEditExpenseEntry(exp);
     setExpCategory(exp.category);
     setExpVendor(exp.vendor ?? '');
     setExpAmount(String(exp.amount));
     setExpDate(exp.date);
+    setExpAmountError(undefined);
   };
 
   const confirmEditExpense = async () => {
-    if (!editExpense) return;
+    if (!editExpenseEntry) return;
     const amount = parseFloat(expAmount);
-    if (isNaN(amount) || amount <= 0) { Alert.alert('Invalid', 'Enter a valid amount.'); return; }
+    if (isNaN(amount) || amount <= 0) {
+      setExpAmountError('Enter a valid amount');
+      return;
+    }
+    setExpAmountError(undefined);
     setExpSaving(true);
     try {
-      await api.editExpense(editExpense.id, {
+      await api.editExpense(editExpenseEntry.id, {
         category: expCategory.trim(),
         vendor: expVendor.trim() || undefined,
         amount,
         date: expDate.trim(),
       });
-      setEditExpense(null);
+      setEditExpenseEntry(null);
       await load();
     } catch (e) { Alert.alert('Error', e instanceof Error ? e.message : 'Failed'); }
     finally { setExpSaving(false); }
@@ -170,15 +210,17 @@ export default function JobDetailScreen() {
     setEditTimeEntry(entry);
     setTimeEditHours(String(entry.hours));
     setTimeEditNote(entry.note ?? '');
+    setTimeEditHoursError(undefined);
   };
 
   const confirmEditTimeEntry = async () => {
     if (!editTimeEntry) return;
     const hours = parseFloat(timeEditHours);
     if (isNaN(hours) || hours <= 0 || hours > 24) {
-      Alert.alert('Invalid', 'Enter a valid number of hours (0–24).');
+      setTimeEditHoursError('Enter valid hours (0–24)');
       return;
     }
+    setTimeEditHoursError(undefined);
     setTimeEditSaving(true);
     try {
       await api.editTimeEntry(editTimeEntry.id, {
@@ -223,109 +265,6 @@ export default function JobDetailScreen() {
 
   return (
     <Screen headerMode="native" padded={false}>
-      {/* Edit Time Entry Modal — kept as RN Modal, internals reskinned */}
-      <Modal visible={!!editTimeEntry} transparent animationType="fade" onRequestClose={() => setEditTimeEntry(null)}>
-        <View style={s.modalOverlay}>
-          <View style={[s.modalCard, { backgroundColor: colors.card, borderRadius: radius.lg }]}>
-            <Text variant="title3" weight="700">Edit Time Entry</Text>
-            {editTimeEntry ? (
-              <Text variant="footnote" tone="muted">
-                {editTimeEntry.employeeName} · {formatDate(editTimeEntry.date)}
-              </Text>
-            ) : null}
-            <Input
-              label="Hours"
-              placeholder="e.g. 8.0"
-              value={timeEditHours}
-              onChangeText={setTimeEditHours}
-              keyboardType="decimal-pad"
-            />
-            <Input
-              label="Note (optional)"
-              placeholder="Optional note"
-              value={timeEditNote}
-              onChangeText={setTimeEditNote}
-            />
-            <View style={s.modalBtnRow}>
-              <View style={{ flex: 1 }}>
-                <Button
-                  variant="primary"
-                  size="md"
-                  fullWidth
-                  label="Save"
-                  onPress={() => void confirmEditTimeEntry()}
-                  loading={timeEditSaving}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Button
-                  variant="secondary"
-                  size="md"
-                  fullWidth
-                  label="Cancel"
-                  onPress={() => setEditTimeEntry(null)}
-                />
-              </View>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Edit Expense Modal — kept as RN Modal, internals reskinned */}
-      <Modal visible={!!editExpense} transparent animationType="fade" onRequestClose={() => setEditExpense(null)}>
-        <View style={s.modalOverlay}>
-          <View style={[s.modalCard, { backgroundColor: colors.card, borderRadius: radius.lg }]}>
-            <Text variant="title3" weight="700">Edit Expense</Text>
-            <Input
-              label="Category"
-              placeholder="Category"
-              value={expCategory}
-              onChangeText={setExpCategory}
-            />
-            <Input
-              label="Vendor (optional)"
-              placeholder="Vendor"
-              value={expVendor}
-              onChangeText={setExpVendor}
-            />
-            <Input
-              label="Amount"
-              placeholder="0.00"
-              value={expAmount}
-              onChangeText={setExpAmount}
-              keyboardType="decimal-pad"
-            />
-            <Input
-              label="Date"
-              placeholder="YYYY-MM-DD"
-              value={expDate}
-              onChangeText={setExpDate}
-            />
-            <View style={s.modalBtnRow}>
-              <View style={{ flex: 1 }}>
-                <Button
-                  variant="primary"
-                  size="md"
-                  fullWidth
-                  label="Save"
-                  onPress={() => void confirmEditExpense()}
-                  loading={expSaving}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Button
-                  variant="secondary"
-                  size="md"
-                  fullWidth
-                  label="Cancel"
-                  onPress={() => setEditExpense(null)}
-                />
-              </View>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       {/* Hero section */}
       <View
         testID="jobdetail-hero"
@@ -472,7 +411,7 @@ export default function JobDetailScreen() {
         {/* Income tab */}
         {tab === 'income' && (
           <>
-            {canManage && !addingIncome && (
+            {canManage && (
               <Button
                 variant="secondary"
                 size="md"
@@ -480,52 +419,6 @@ export default function JobDetailScreen() {
                 label="+ Add Income"
                 onPress={() => setAddingIncome(true)}
               />
-            )}
-            {addingIncome && (
-              <Card elevation="sm" padding="md" radius="md">
-                <Text variant="headline" weight="700">Add Income</Text>
-                <Input
-                  label="Amount"
-                  placeholder="0.00"
-                  value={incomeAmount}
-                  onChangeText={(v) => { setIncomeAmount(v); if (incomeAmountError) setIncomeAmountError(undefined); }}
-                  keyboardType="decimal-pad"
-                  error={incomeAmountError}
-                />
-                <Input
-                  label="Date"
-                  placeholder="YYYY-MM-DD"
-                  value={incomeDate}
-                  onChangeText={setIncomeDate}
-                />
-                <Input
-                  label="Description (optional)"
-                  placeholder="Optional description"
-                  value={incomeDesc}
-                  onChangeText={setIncomeDesc}
-                />
-                <View style={s.modalBtnRow}>
-                  <View style={{ flex: 1 }}>
-                    <Button
-                      variant="primary"
-                      size="md"
-                      fullWidth
-                      label="Save"
-                      onPress={() => void handleAddIncome()}
-                      loading={incomeSaving}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Button
-                      variant="secondary"
-                      size="md"
-                      fullWidth
-                      label="Cancel"
-                      onPress={() => setAddingIncome(false)}
-                    />
-                  </View>
-                </View>
-              </Card>
             )}
             {income.length === 0 ? (
               <View style={s.emptyState}>
@@ -658,6 +551,125 @@ export default function JobDetailScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* Edit Time Entry Sheet — sibling at screen root (gorhom anchoring pattern) */}
+      {!!editTimeEntry && (
+        <Sheet
+          testID="jobdetail-edit-time-sheet"
+          snapPoints={['55%']}
+          onClose={() => setEditTimeEntry(null)}
+          header={
+            <SheetHeader
+              title="Edit Entry"
+              onCancel={() => setEditTimeEntry(null)}
+              onSave={() => void confirmEditTimeEntry()}
+              loading={timeEditSaving}
+            />
+          }
+        >
+          {editTimeEntry ? (
+            <Text variant="footnote" tone="muted">
+              {editTimeEntry.employeeName} · {formatDate(editTimeEntry.date)}
+            </Text>
+          ) : null}
+          <Input
+            label="Hours"
+            placeholder="e.g. 8.0"
+            value={timeEditHours}
+            onChangeText={(v) => { setTimeEditHours(v); if (timeEditHoursError) setTimeEditHoursError(undefined); }}
+            keyboardType="decimal-pad"
+            error={timeEditHoursError}
+          />
+          <Input
+            label="Note (optional)"
+            placeholder="Optional note"
+            value={timeEditNote}
+            onChangeText={setTimeEditNote}
+          />
+        </Sheet>
+      )}
+
+      {/* Edit Expense Sheet — sibling at screen root (gorhom anchoring pattern) */}
+      {!!editExpenseEntry && (
+        <Sheet
+          testID="jobdetail-edit-expense-sheet"
+          snapPoints={['60%']}
+          onClose={() => setEditExpenseEntry(null)}
+          header={
+            <SheetHeader
+              title="Edit Expense"
+              onCancel={() => setEditExpenseEntry(null)}
+              onSave={() => void confirmEditExpense()}
+              loading={expSaving}
+            />
+          }
+        >
+          <Input
+            label="Category"
+            placeholder="Category"
+            value={expCategory}
+            onChangeText={setExpCategory}
+          />
+          <Input
+            label="Vendor (optional)"
+            placeholder="Vendor"
+            value={expVendor}
+            onChangeText={setExpVendor}
+          />
+          <Input
+            label="Amount"
+            placeholder="0.00"
+            value={expAmount}
+            onChangeText={(v) => { setExpAmount(v); if (expAmountError) setExpAmountError(undefined); }}
+            keyboardType="decimal-pad"
+            error={expAmountError}
+          />
+          <Input
+            label="Date"
+            placeholder="YYYY-MM-DD"
+            value={expDate}
+            onChangeText={setExpDate}
+          />
+        </Sheet>
+      )}
+
+      {/* Add Income Sheet — sibling at screen root (gorhom anchoring pattern) */}
+      {addingIncome && (
+        <Sheet
+          testID="jobdetail-add-income-sheet"
+          fitContent
+          onClose={() => setAddingIncome(false)}
+          header={
+            <SheetHeader
+              title="Add Income"
+              onCancel={() => setAddingIncome(false)}
+              onSave={() => void handleAddIncome()}
+              loading={incomeSaving}
+            />
+          }
+        >
+          <Input
+            label="Amount"
+            placeholder="0.00"
+            value={incomeAmount}
+            onChangeText={(v) => { setIncomeAmount(v); if (incomeAmountError) setIncomeAmountError(undefined); }}
+            keyboardType="decimal-pad"
+            error={incomeAmountError}
+          />
+          <Input
+            label="Date"
+            placeholder="YYYY-MM-DD"
+            value={incomeDate}
+            onChangeText={setIncomeDate}
+          />
+          <Input
+            label="Description (optional)"
+            placeholder="Optional description"
+            value={incomeDesc}
+            onChangeText={setIncomeDesc}
+          />
+        </Sheet>
+      )}
     </Screen>
   );
 }
@@ -669,7 +681,4 @@ const s = StyleSheet.create({
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   emptyState: { alignItems: 'center', paddingVertical: 32, gap: 8 },
   editRowBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 16 },
-  modalCard: { gap: 12, padding: 20 },
-  modalBtnRow: { flexDirection: 'row', gap: 10 },
 });
