@@ -30,6 +30,12 @@ appId: com.hbs.mobile
     point: "50%,30%"
 - tapOn:
     id: "login-submit-button"
+# iOS may show a "Save Password?" system dialog after submitting a secure field
+# (esp. for credentials it hasn't seen before). Dismiss it if present — optional so
+# the flow doesn't fail when the dialog doesn't appear.
+- tapOn:
+    text: "Not Now"
+    optional: true
 # Post-login assertion: login is an async network call, so WAIT (up to 20s) for the
 # authenticated shell rather than racing it. Phase 4 redesigned the Dashboard, so we
 # assert on stable testIDs (transform-proof, role-independent) instead of the old
