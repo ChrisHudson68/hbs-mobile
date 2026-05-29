@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator, Alert, ScrollView, StyleSheet, TextInput, View,
 } from 'react-native';
+import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApi } from '../../src/mobile/hooks/useApi';
 import { useTheme } from '../../src/mobile/theme';
 import type { JobListItem } from '../../src/mobile/types';
@@ -44,6 +45,8 @@ export default function NewInvoiceScreen() {
   const navigation = useNavigation();
   const api = useApi();
   const { colors, spacing, radius } = useTheme();
+  const frame = useSafeAreaFrame();
+  const insets = useSafeAreaInsets();
   const { jobId: preselectedJobId } = useLocalSearchParams<{ jobId?: string }>();
 
   // --- data -----------------------------------------------------------------
@@ -167,8 +170,10 @@ export default function NewInvoiceScreen() {
   // --- render ---------------------------------------------------------------
   return (
     <Screen headerMode="native" padded={false} keyboardAvoiding>
+      <View style={{ height: frame.height - insets.top }}>
       {/* Main form in a ScrollView (keyboard-aware via Screen keyboardAvoiding) */}
       <ScrollView
+        style={{ flex: 1 }}
         contentContainerStyle={{ padding: spacing.md, gap: spacing.md, paddingBottom: 8 }}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
@@ -271,6 +276,7 @@ export default function NewInvoiceScreen() {
           onPress={() => void handleSave()}
           testID="newinvoice-save-button"
         />
+      </View>
       </View>
 
       {/* Job picker Sheet — sibling, NEVER inside ScrollView (gorhom-sheet-anchoring) */}

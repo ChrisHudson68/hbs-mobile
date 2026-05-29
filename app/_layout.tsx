@@ -40,13 +40,13 @@ function AppNavigator() {
     >
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="jobs/new" options={{ title: 'New Job', headerBackTitle: 'Jobs', presentation: 'pageSheet' }} />
+      <Stack.Screen name="jobs/new" options={{ title: 'New Job', headerBackTitle: 'Jobs', presentation: 'formSheet' }} />
       <Stack.Screen name="jobs/[id]" options={{ title: 'Job Details', headerBackTitle: 'Jobs' }} />
       <Stack.Screen name="timesheets/manual" options={{ title: 'Add Time Entry', headerBackTitle: 'Timesheets', presentation: 'formSheet' }} />
       <Stack.Screen name="invoices/new" options={{ title: 'New Invoice', headerBackTitle: 'Invoices', presentation: 'formSheet' }} />
       <Stack.Screen name="invoices/[id]" options={{ title: 'Invoice', headerBackTitle: 'Invoices' }} />
       <Stack.Screen name="employees" options={{ title: 'Employees', headerLargeTitle: true, headerBackTitle: 'More' }} />
-      <Stack.Screen name="expenses/new" options={{ title: 'New Expense', headerBackTitle: 'More', presentation: 'pageSheet' }} />
+      <Stack.Screen name="expenses/new" options={{ title: 'New Expense', headerBackTitle: 'More', presentation: 'formSheet' }} />
     </Stack>
   );
 }

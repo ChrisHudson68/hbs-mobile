@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Alert, Pressable,
   ScrollView, StyleSheet, Switch, TextInput, View,
 } from 'react-native';
+import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApi } from '../../src/mobile/hooks/useApi';
 import { useTheme } from '../../src/mobile/theme';
 import { Button } from '@/components/ui/Button';
@@ -20,6 +21,8 @@ export default function NewJobScreen() {
   const { editId } = useLocalSearchParams<{ editId?: string }>();
   const isEditing = Boolean(editId);
   const { colors, spacing, radius, typographyRamp } = useTheme();
+  const frame = useSafeAreaFrame();
+  const insets = useSafeAreaInsets();
 
   const [jobName, setJobName] = useState('');
   const [jobCode, setJobCode] = useState('');
@@ -99,8 +102,10 @@ export default function NewJobScreen() {
 
   return (
     <Screen headerMode="native" padded={false} keyboardAvoiding>
+      <View style={{ height: frame.height - insets.top }}>
       <ScrollView
-        contentContainerStyle={{ padding: spacing.md, gap: spacing.md }}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: spacing.md, gap: spacing.md, paddingBottom: 24 }}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
       >
@@ -238,6 +243,7 @@ export default function NewJobScreen() {
           onPress={() => void handleSave()}
           testID="newjob-save-button"
         />
+      </View>
       </View>
     </Screen>
   );

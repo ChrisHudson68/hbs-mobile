@@ -5,6 +5,7 @@ import {
   ScrollView, StyleSheet, TextInput, View,
   ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApi } from '../../src/mobile/hooks/useApi';
 import { useTheme } from '../../src/mobile/theme';
 import type { Employee, JobListItem } from '../../src/mobile/types';
@@ -56,6 +57,8 @@ export default function ManualTimeEntryScreen() {
   const api = useApi();
   const { jobId: preselectedJobId } = useLocalSearchParams<{ jobId?: string }>();
   const { colors, spacing, radius, typographyRamp } = useTheme();
+  const frame = useSafeAreaFrame();
+  const insets = useSafeAreaInsets();
 
   // ---- data ----------------------------------------------------------------
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -172,7 +175,9 @@ export default function ManualTimeEntryScreen() {
 
   return (
     <Screen headerMode="native" padded={false} keyboardAvoiding>
+      <View style={{ height: frame.height - insets.top }}>
       <ScrollView
+        style={{ flex: 1 }}
         contentContainerStyle={{ padding: spacing.md, gap: spacing.md, paddingBottom: 32 }}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
@@ -292,7 +297,7 @@ export default function ManualTimeEntryScreen() {
         </View>
       </ScrollView>
 
-      {/* ---- Save button pinned outside ScrollView ---- */}
+      {/* ---- Save button pinned to bottom of the modal (outside ScrollView) ---- */}
       <View style={{ padding: spacing.md }}>
         <Button
           variant="primary"
@@ -303,6 +308,7 @@ export default function ManualTimeEntryScreen() {
           loading={saving}
           testID="manualtime-save-button"
         />
+      </View>
       </View>
 
       {/* ---- Job picker sheet — sibling, NEVER inside ScrollView ---- */}

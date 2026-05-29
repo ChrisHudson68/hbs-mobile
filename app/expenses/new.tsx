@@ -5,6 +5,7 @@ import {
   ActivityIndicator, Alert, Image, Pressable,
   ScrollView, StyleSheet, Text as RNText, View,
 } from 'react-native';
+import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApi } from '../../src/mobile/hooks/useApi';
 import { useTheme } from '../../src/mobile/theme';
 import type { JobListItem } from '../../src/mobile/types';
@@ -24,6 +25,8 @@ export default function NewExpenseScreen() {
   const api = useApi();
   const { jobId: preselectedJobId } = useLocalSearchParams<{ jobId?: string }>();
   const { colors, spacing, radius } = useTheme();
+  const frame = useSafeAreaFrame();
+  const insets = useSafeAreaInsets();
 
   const [jobs, setJobs] = useState<JobListItem[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
@@ -179,7 +182,9 @@ export default function NewExpenseScreen() {
 
   return (
     <Screen headerMode="native" padded={false} keyboardAvoiding>
+      <View style={{ height: frame.height - insets.top }}>
       <ScrollView
+        style={{ flex: 1 }}
         contentContainerStyle={{ padding: spacing.md, gap: spacing.md, paddingBottom: 32 }}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
@@ -289,6 +294,7 @@ export default function NewExpenseScreen() {
           onPress={() => void handleSave()}
           testID="newexpense-save-button"
         />
+      </View>
       </View>
 
       {/* ── Sheets — siblings at root level, NEVER inside ScrollView ── */}
