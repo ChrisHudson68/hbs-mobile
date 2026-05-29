@@ -1,23 +1,30 @@
-import { useRouter } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator, Pressable, RefreshControl,
-  SafeAreaView, ScrollView, StyleSheet, Text, View,
+  ScrollView, StyleSheet, Text as RNText, View,
 } from 'react-native';
 import { useApi } from '../../../src/mobile/hooks/useApi';
-import { Colors, Radius, Spacing } from '../../../src/mobile/theme';
+import { useTheme } from '../../../src/mobile/theme';
 import type { Invoice } from '../../../src/mobile/types';
 import { formatCurrency, formatDate, isManagerOrAdmin } from '../../../src/mobile/utils';
 import { useAuth } from '../../../src/mobile/context/AuthContext';
+import { Screen } from '@/components/ui/Screen';
+import { Card } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
+import { Text } from '@/components/ui/Text';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 
 type InvoiceFilter = 'unpaid' | 'partial' | 'paid' | 'all';
 
-function statusColor(status: string) {
+type BadgeTone = 'success' | 'danger' | 'warning' | 'neutral';
+
+function statusTone(status: string): BadgeTone {
   const s = status.toLowerCase();
-  if (s === 'paid') return Colors.success;
-  if (s === 'unpaid') return Colors.danger;
-  if (s === 'partial') return Colors.warning;
-  return Colors.muted;
+  if (s === 'paid') return 'success';
+  if (s === 'unpaid') return 'danger';
+  if (s === 'partial') return 'warning';
+  return 'neutral';
 }
 
 function matchesFilter(inv: Invoice, filter: InvoiceFilter): boolean {
@@ -25,16 +32,50 @@ function matchesFilter(inv: Invoice, filter: InvoiceFilter): boolean {
   return inv.status?.toLowerCase() === filter;
 }
 
+const FILTER_LABELS: Record<InvoiceFilter, string> = {
+  unpaid: 'Unpaid',
+  partial: 'Partial',
+  paid: 'Paid',
+  all: 'All',
+};
+
+const FILTER_TEST_IDS: Record<InvoiceFilter, string> = {
+  unpaid: 'invoices-filter-unpaid',
+  partial: 'invoices-filter-partial',
+  paid: 'invoices-filter-paid',
+  all: 'invoices-filter-all',
+};
+
 export default function InvoicesScreen() {
   const api = useApi();
   const router = useRouter();
+  const navigation = useNavigation();
   const { user } = useAuth();
+  const { colors, spacing, radius } = useTheme();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<InvoiceFilter>('unpaid');
   const canManage = isManagerOrAdmin(user);
 
+  // Manager "+ New" header action (Pattern G)
+  useEffect(() => {
+    if (!canManage) return;
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          testID="invoices-new-button"
+          accessibilityLabel="New Invoice"
+          onPress={() => router.push('/invoices/new')}
+          style={{ padding: spacing.sm }}
+        >
+          <IconSymbol name="plus" size={22} color={colors.navy} />
+        </Pressable>
+      ),
+    });
+  }, [canManage, navigation, router, colors.navy, spacing.sm]);
+
+  // Pattern H: unchanged data load
   const load = useCallback(async (isRefresh = false) => {
     isRefresh ? setRefreshing(true) : setLoading(true);
     try {
@@ -47,7 +88,13 @@ export default function InvoicesScreen() {
   useEffect(() => { void load(); }, [load]);
 
   if (loading) {
-    return <SafeAreaView style={s.safe}><View style={s.center}><ActivityIndicator size="large" color={Colors.navy} /></View></SafeAreaView>;
+    return (
+      <Screen headerMode="native">
+        <View style={s.center}>
+          <ActivityIndicator size="large" color={colors.navy} />
+        </View>
+      </Screen>
+    );
   }
 
   const counts: Record<InvoiceFilter, number> = {
@@ -66,103 +113,188 @@ export default function InvoicesScreen() {
       return b.dueDate.localeCompare(a.dueDate);
     });
 
-  const unpaidTotal = invoices
-    .filter(i => i.status?.toLowerCase() !== 'paid')
-    .reduce((sum, i) => sum + Number(i.balance || 0), 0);
+  // Manager-gated open-balance banner (T-05-05-01)
+  const unpaidTotal = canManage
+    ? invoices
+        .filter(i => i.status?.toLowerCase() !== 'paid')
+        .reduce((sum, i) => sum + Number(i.balance || 0), 0)
+    : 0;
 
   return (
-    <SafeAreaView style={s.safe}>
-      <View style={s.topBar}>
-        <Text style={s.title}>Invoices</Text>
-        {canManage && (
-          <Pressable style={s.addBtn} onPress={() => router.push('/invoices/new')}>
-            <Text style={s.addBtnText}>+ New</Text>
-          </Pressable>
-        )}
-      </View>
-
-      {unpaidTotal > 0 && (
-        <View style={s.alertBanner}>
-          <Text style={s.alertText}>Open balance: {formatCurrency(unpaidTotal)}</Text>
-        </View>
-      )}
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterBar} contentContainerStyle={s.filterRow}>
-        {(['unpaid', 'partial', 'paid', 'all'] as InvoiceFilter[]).map(f => (
-          <Pressable key={f} style={[s.filterPill, filter === f && s.filterPillActive]} onPress={() => setFilter(f)}>
-            <Text style={[s.filterPillText, filter === f && s.filterPillTextActive]}>
-              {f.charAt(0).toUpperCase() + f.slice(1)}
-              {' '}
-              <Text style={[s.filterCount, filter === f && s.filterCountActive]}>{counts[f]}</Text>
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-
+    <Screen headerMode="native" padded={false}>
       <ScrollView
-        contentContainerStyle={s.scroll}
+        contentContainerStyle={{ padding: spacing.md, paddingTop: 0, gap: 10 }}
+        contentInsetAdjustmentBehavior="automatic"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
       >
-        {filtered.length === 0 && (
-          <Text style={s.empty}>No {filter === 'all' ? '' : filter + ' '}invoices found.</Text>
+        {/* Open-balance banner — manager only (T-05-05-01) */}
+        {canManage && unpaidTotal > 0 && (
+          <View style={{
+            marginTop: spacing.sm,
+            backgroundColor: colors.warningBg,
+            borderRadius: radius.md,
+            padding: spacing.md,
+            borderWidth: 1,
+            borderColor: colors.warningBorder,
+          }}>
+            <RNText style={{ color: colors.warning, fontWeight: '700', fontSize: 13 }}>
+              Open balance: {formatCurrency(unpaidTotal)}
+            </RNText>
+          </View>
         )}
-        {filtered.map(inv => {
+
+        {/* Filter chips — Phase-4 D-06 chip pattern */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: spacing.sm, flexDirection: 'row', paddingVertical: 2 }}
+        >
+          {(['unpaid', 'partial', 'paid', 'all'] as InvoiceFilter[]).map(f => {
+            const isActive = filter === f;
+            return (
+              <Pressable
+                key={f}
+                testID={FILTER_TEST_IDS[f]}
+                style={[
+                  s.chip,
+                  {
+                    paddingVertical: 6,
+                    paddingHorizontal: 14,
+                    borderRadius: radius.pill,
+                    borderWidth: 1,
+                    minHeight: 44,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    flexDirection: 'row',
+                    gap: 5,
+                  },
+                  isActive
+                    ? { backgroundColor: colors.navy, borderColor: colors.navy }
+                    : { backgroundColor: colors.card, borderColor: colors.border },
+                ]}
+                onPress={() => setFilter(f)}
+              >
+                <RNText style={{
+                  fontSize: 13,
+                  fontWeight: '600',
+                  lineHeight: 19,
+                  color: isActive ? colors.inverse : colors.muted,
+                }}>
+                  {FILTER_LABELS[f]}
+                </RNText>
+                <RNText style={{
+                  fontSize: 12,
+                  fontWeight: '400',
+                  lineHeight: 16,
+                  color: isActive ? 'rgba(255,255,255,0.7)' : colors.mutedLight,
+                }}>
+                  {counts[f]}
+                </RNText>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {/* Empty state (Pattern I) */}
+        {filtered.length === 0 && (
+          <View style={{ alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm }}>
+            <IconSymbol name="doc.text" size={48} color={colors.mutedLight} />
+            <RNText style={{
+              fontSize: 15,
+              fontWeight: '400',
+              lineHeight: 21,
+              color: colors.muted,
+              textAlign: 'center',
+            }}>
+              {filter === 'all'
+                ? 'No invoices found.'
+                : `No ${FILTER_LABELS[filter].toLowerCase()} invoices found.`}
+            </RNText>
+          </View>
+        )}
+
+        {/* Invoice cards */}
+        {filtered.map((inv, idx) => {
           const overdue = inv.status?.toLowerCase() !== 'paid' && new Date(inv.dueDate) < new Date();
+          const hasBalance = Number(inv.balance) > 0 && inv.status?.toLowerCase() !== 'paid';
           return (
-            <Pressable key={inv.id} style={[s.card, overdue && s.cardOverdue]} onPress={() => router.push(`/invoices/${inv.id}`)}>
-              <View style={s.row}>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.invNum}>{inv.invoiceNumber ?? `Invoice #${inv.id}`}</Text>
-                  <Text style={s.jobName}>{inv.jobName ?? '—'}</Text>
-                  <Text style={s.date}>
-                    Issued {formatDate(inv.dateIssued)} · {overdue ? '⚠ Overdue' : `Due ${formatDate(inv.dueDate)}`}
-                  </Text>
-                </View>
-                <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                  <Text style={s.amount}>{formatCurrency(inv.amount)}</Text>
-                  <View style={[s.badge, { backgroundColor: statusColor(inv.status) + '20' }]}>
-                    <Text style={[s.badgeText, { color: statusColor(inv.status) }]}>{inv.status}</Text>
+            <Pressable
+              key={inv.id}
+              onPress={() => router.push(`/invoices/${inv.id}`)}
+            >
+              <Card
+                elevation="sm"
+                padding="md"
+                radius="lg"
+                testID={idx === 0 ? 'invoices-card-0' : undefined}
+              >
+                {/* Overdue left accent */}
+                {overdue && (
+                  <View style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: 3,
+                    backgroundColor: colors.danger,
+                    borderTopLeftRadius: radius.lg,
+                    borderBottomLeftRadius: radius.lg,
+                  }} />
+                )}
+
+                {/* Top row: invoice number + amount/badge */}
+                <View style={s.cardTop}>
+                  <View style={{ flex: 1 }}>
+                    <Text variant="headline" weight="600" numberOfLines={1}>
+                      {inv.invoiceNumber ?? `Invoice #${inv.id}`}
+                    </Text>
+                    {inv.jobName ? (
+                      <RNText style={{ fontSize: 12, fontWeight: '600', color: colors.navy, marginTop: 2 }}>
+                        {inv.jobName}
+                      </RNText>
+                    ) : null}
+                    <RNText style={{
+                      fontSize: 11,
+                      color: overdue ? colors.danger : colors.muted,
+                      marginTop: 2,
+                    }}>
+                      {overdue
+                        ? `Issued ${formatDate(inv.dateIssued)} · ⚠ Overdue`
+                        : `Issued ${formatDate(inv.dateIssued)} · Due ${formatDate(inv.dueDate)}`}
+                    </RNText>
+                  </View>
+
+                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                    <RNText style={{ fontSize: 20, fontWeight: '700', lineHeight: 26, color: colors.text }}>
+                      {formatCurrency(inv.amount)}
+                    </RNText>
+                    <Badge
+                      tone={statusTone(inv.status ?? '')}
+                      label={inv.status ?? 'Unknown'}
+                    />
                   </View>
                 </View>
-              </View>
-              {Number(inv.balance) > 0 && inv.status?.toLowerCase() !== 'paid' && (
-                <Text style={s.balance}>Balance due: {formatCurrency(inv.balance)}</Text>
-              )}
+
+                {/* Balance due line */}
+                {hasBalance && (
+                  <RNText style={{ fontSize: 12, fontWeight: '600', color: colors.danger, marginTop: 4 }}>
+                    Balance due: {formatCurrency(inv.balance)}
+                  </RNText>
+                )}
+              </Card>
             </Pressable>
           );
         })}
+
+        {/* Bottom padding */}
+        <View style={{ height: 12 }} />
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: Spacing.md, paddingBottom: 8 },
-  title: { fontSize: 22, fontWeight: '900', color: Colors.text },
-  addBtn: { backgroundColor: Colors.navy, borderRadius: Radius.md, paddingVertical: 8, paddingHorizontal: 14 },
-  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  alertBanner: { marginHorizontal: Spacing.md, marginBottom: 4, backgroundColor: Colors.warningBg, borderRadius: Radius.md, padding: 10, borderWidth: 1, borderColor: Colors.warningBorder },
-  alertText: { color: Colors.warning, fontWeight: '700', fontSize: 13 },
-  filterBar: { flexGrow: 0, paddingBottom: 10 },
-  filterRow: { paddingHorizontal: Spacing.md, gap: 8, flexDirection: 'row' },
-  filterPill: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 99, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card },
-  filterPillActive: { backgroundColor: Colors.navy, borderColor: Colors.navy },
-  filterPillText: { fontSize: 13, fontWeight: '600', color: Colors.muted },
-  filterPillTextActive: { color: '#fff' },
-  filterCount: { fontSize: 12, color: Colors.mutedLight },
-  filterCountActive: { color: 'rgba(255,255,255,0.7)' },
-  scroll: { padding: Spacing.md, paddingTop: 0, gap: 10 },
-  empty: { textAlign: 'center', color: Colors.muted, marginTop: Spacing.xl },
-  card: { backgroundColor: Colors.card, borderRadius: Radius.lg, padding: 14, borderWidth: 1, borderColor: Colors.border, gap: 6 },
-  cardOverdue: { borderColor: Colors.dangerBorder, borderLeftWidth: 3, borderLeftColor: Colors.danger },
-  row: { flexDirection: 'row', gap: 10 },
-  invNum: { fontSize: 15, fontWeight: '800', color: Colors.text },
-  jobName: { fontSize: 12, color: Colors.navy, fontWeight: '600', marginTop: 2 },
-  date: { fontSize: 11, color: Colors.muted, marginTop: 2 },
-  amount: { fontSize: 16, fontWeight: '900', color: Colors.text },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99 },
-  badgeText: { fontSize: 11, fontWeight: '700' },
-  balance: { fontSize: 12, color: Colors.danger, fontWeight: '600' },
+  chip: {},
+  cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
 });
