@@ -23,13 +23,20 @@ appId: com.hbs.mobile
 - tapOn:
     id: "login-password-input"
 - inputText: "${PASSWORD}"
-- hideKeyboard
+# hideKeyboard fails on the iOS 26.4 simulator / Maestro 2.6 combo, so dismiss the
+# keyboard by tapping the non-interactive headline region (point ~30% down) instead,
+# then submit. Point-tap is robust whether or not the keyboard is currently up.
+- tapOn:
+    point: "50%,30%"
 - tapOn:
     id: "login-submit-button"
 # Post-login assertion: login is an async network call, so WAIT (up to 20s) for the
-# authenticated shell rather than racing it. "THIS WEEK" is a stable Dashboard label.
-# Other screens have no testIDs in Phase 1, so we assert on visible Dashboard text.
+# authenticated shell rather than racing it. Phase 4 redesigned the Dashboard, so we
+# assert on stable testIDs (transform-proof, role-independent) instead of the old
+# "THIS WEEK"/"FINANCIALS" text labels. The clock card + search input always render.
 - extendedWaitUntil:
-    visible: "THIS WEEK"
+    visible:
+      id: "dashboard-job-search-input"
     timeout: 20000
-- assertVisible: "FINANCIALS"
+- assertVisible:
+    id: "dashboard-clock-card"

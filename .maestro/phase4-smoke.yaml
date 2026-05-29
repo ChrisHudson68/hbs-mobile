@@ -1,0 +1,68 @@
+# Phase 4 navigation + redesigned-screen smoke (manager path).
+# Logs in via login.yaml, exercises the kit-migrated screens. Asserts on testIDs
+# (transform-proof) and taps the tab bar by point (avoids text collisions).
+# Tab order after the NAV-01 fix: Dashboard(10%) Jobs(30%) Timesheets(50%) Invoices(70%) More(90%).
+# Job Detail is opened LAST because pushing a stack screen hides the tab bar — doing it
+# last avoids needing an unreliable back-gesture before tab navigation.
+# Creds via -e SUBDOMAIN/EMAIL/PASSWORD — never hardcoded. Role-gated (employee
+# no-financials) + dark-mode checks are NOT covered here (need an employee account + manual pass).
+appId: com.hbs.mobile
+---
+- runFlow: login.yaml
+# Dashboard (redesigned) — clock card + search render
+- assertVisible:
+    id: "dashboard-clock-card"
+- assertVisible:
+    id: "dashboard-job-search-input"
+# Jobs tab — list search + filter chips render
+- tapOn:
+    point: "30%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "jobs-search-input"
+    timeout: 10000
+- assertVisible:
+    id: "jobs-filter-active"
+- assertVisible:
+    id: "jobs-filter-completed"
+# More tab — grouped settings list renders
+- tapOn:
+    point: "90%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "more-profile-card"
+    timeout: 10000
+- assertVisible:
+    id: "more-signout-button"
+- assertVisible:
+    id: "more-weekly-reminder-toggle"
+# Timesheets tab — structural-only this phase, assert it loads (no crash)
+- tapOn:
+    point: "50%,95%"
+- waitForAnimationToEnd
+# Invoices tab — structural-only, assert it loads
+- tapOn:
+    point: "70%,95%"
+- waitForAnimationToEnd
+# Dashboard tab — confirm round-trip back to first tab works
+- tapOn:
+    point: "10%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "dashboard-clock-card"
+    timeout: 10000
+# LAST: open a job → Job detail native segmented control (pushed screen; end here)
+- tapOn:
+    point: "30%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "jobs-card-0"
+    timeout: 10000
+- tapOn:
+    id: "jobs-card-0"
+- extendedWaitUntil:
+    visible:
+      id: "jobdetail-section-tabs"
+    timeout: 10000
+- assertVisible:
+    id: "jobdetail-hero"
