@@ -1,20 +1,29 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActionSheetIOS, ActivityIndicator, Alert, Image, Platform,
-  Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Alert, Image, Pressable,
+  ScrollView, StyleSheet, Text as RNText, View,
 } from 'react-native';
 import { useApi } from '../../src/mobile/hooks/useApi';
-import { Colors, Radius, Spacing } from '../../src/mobile/theme';
+import { useTheme } from '../../src/mobile/theme';
 import type { JobListItem } from '../../src/mobile/types';
+import { Button } from '@/components/ui/Button';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Input } from '@/components/ui/Input';
+import { ListRow } from '@/components/ui/ListRow';
+import { Screen } from '@/components/ui/Screen';
+import { Sheet } from '@/components/ui/Sheet';
+import { Text } from '@/components/ui/Text';
 
 const CATEGORIES = ['Materials', 'Equipment', 'Subcontractor', 'Fuel', 'Tools', 'Other'];
 
 export default function NewExpenseScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const api = useApi();
   const { jobId: preselectedJobId } = useLocalSearchParams<{ jobId?: string }>();
+  const { colors, spacing, radius } = useTheme();
 
   const [jobs, setJobs] = useState<JobListItem[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
@@ -31,6 +40,16 @@ export default function NewExpenseScreen() {
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Picker sheet open state
+  const [receiptSheetOpen, setReceiptSheetOpen] = useState(false);
+  const [jobPickerOpen, setJobPickerOpen] = useState(false);
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+
+  // Inline error state (D-12)
+  const [jobError, setJobError] = useState<string | undefined>(undefined);
+  const [amountError, setAmountError] = useState<string | undefined>(undefined);
+  const [receiptError, setReceiptError] = useState<string | undefined>(undefined);
+
   const load = useCallback(async () => {
     setLoadingJobs(true);
     try {
@@ -42,6 +61,30 @@ export default function NewExpenseScreen() {
 
   useEffect(() => { void load(); }, [load]);
 
+  // Discard guard (Pattern E / D-10)
+  const isDirty =
+    !!selectedJobId ||
+    amount.trim().length > 0 ||
+    !!receiptFilename ||
+    vendor.trim().length > 0;
+
+  useEffect(() => {
+    const sub = navigation.addListener('beforeRemove', (e: any) => {
+      if (!isDirty) return;
+      e.preventDefault();
+      Alert.alert(
+        'Discard changes?',
+        "Your changes won't be saved.",
+        [
+          { text: 'Keep Editing', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: () => navigation.dispatch(e.data.action) },
+        ]
+      );
+    });
+    return sub;
+  }, [navigation, isDirty]);
+
+  // ─── PROTECTED: uploadAsset — DO NOT EDIT ───────────────────────────────────
   const uploadAsset = async (asset: ImagePicker.ImagePickerAsset) => {
     setReceiptUri(asset.uri);
     setUploadingReceipt(true);
@@ -67,7 +110,9 @@ export default function NewExpenseScreen() {
       setUploadingReceipt(false);
     }
   };
+  // ────────────────────────────────────────────────────────────────────────────
 
+  // ─── PROTECTED: launchCamera — DO NOT EDIT ──────────────────────────────────
   const launchCamera = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
@@ -78,7 +123,9 @@ export default function NewExpenseScreen() {
     if (result.canceled || !result.assets?.[0]) return;
     await uploadAsset(result.assets[0]);
   };
+  // ────────────────────────────────────────────────────────────────────────────
 
+  // ─── PROTECTED: launchLibrary — DO NOT EDIT ─────────────────────────────────
   const launchLibrary = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -88,41 +135,28 @@ export default function NewExpenseScreen() {
     if (result.canceled || !result.assets?.[0]) return;
     await uploadAsset(result.assets[0]);
   };
+  // ────────────────────────────────────────────────────────────────────────────
 
   const handlePickReceipt = () => {
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ['Cancel', 'Take Photo', 'Choose from Library'],
-          cancelButtonIndex: 0,
-        },
-        (index) => {
-          if (index === 1) void launchCamera();
-          if (index === 2) void launchLibrary();
-        },
-      );
-    } else {
-      Alert.alert('Receipt Photo', 'How would you like to add a receipt?', [
-        { text: 'Take Photo', onPress: () => void launchCamera() },
-        { text: 'Choose from Library', onPress: () => void launchLibrary() },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    }
+    setReceiptSheetOpen(true);
   };
 
   const handleSave = async () => {
-    if (!selectedJobId) { Alert.alert('Required', 'Select a job.'); return; }
-    if (!amount.trim()) { Alert.alert('Required', 'Enter an amount.'); return; }
-    if (!receiptFilename) { Alert.alert('Required', 'Upload a receipt photo.'); return; }
+    let hasError = false;
+    if (!selectedJobId) { setJobError('Select a job'); hasError = true; }
+    if (!amount.trim()) { setAmountError('Enter an amount'); hasError = true; }
+    if (!receiptFilename) { setReceiptError('Upload a receipt photo'); hasError = true; }
+    if (hasError) return;
+
     setSaving(true);
     try {
       await api.createExpense({
-        jobId: selectedJobId,
+        jobId: selectedJobId!,
         category,
         vendor: vendor.trim() || undefined,
         amount,
         date,
-        receiptFilename,
+        receiptFilename: receiptFilename!,
       });
       Alert.alert('Saved', 'Expense logged successfully.', [{ text: 'OK', onPress: () => router.back() }]);
     } catch (e) {
@@ -131,111 +165,225 @@ export default function NewExpenseScreen() {
     }
   };
 
+  const selectedJob = jobs.find(j => j.id === selectedJobId);
+
   if (loadingJobs) {
-    return <SafeAreaView style={s.safe}><View style={s.center}><ActivityIndicator size="large" color={Colors.navy} /></View></SafeAreaView>;
+    return (
+      <Screen headerMode="native">
+        <View style={s.center}>
+          <ActivityIndicator size="large" color={colors.navy} />
+        </View>
+      </Screen>
+    );
   }
 
   return (
-    <SafeAreaView style={s.safe}>
-      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+    <Screen headerMode="native" padded={false} keyboardAvoiding>
+      <ScrollView
+        contentContainerStyle={{ padding: spacing.md, gap: spacing.md, paddingBottom: 32 }}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+      >
 
-        <View style={s.field}>
-          <Text style={s.label}>Job *</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
-            <View style={s.pills}>
-              {jobs.map(j => (
-                <Pressable
-                  key={j.id}
-                  style={[s.pill, selectedJobId === j.id && s.pillActive]}
-                  onPress={() => setSelectedJobId(j.id)}
-                >
-                  <Text style={[s.pillText, selectedJobId === j.id && s.pillTextActive]}>
-                    {j.jobName}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
+        {/* Job picker trigger */}
+        <View style={{ gap: spacing.xs }}>
+          <Text variant="footnote" tone="muted">Job *</Text>
+          <ListRow
+            title={selectedJob?.jobName ?? 'Tap to select a job'}
+            trailing="chevron"
+            onPress={() => { setJobPickerOpen(true); if (jobError) setJobError(undefined); }}
+            testID="newexpense-job-picker"
+          />
+          {jobError ? (
+            <Text variant="footnote" tone="danger">{jobError}</Text>
+          ) : null}
         </View>
 
-        <View style={s.field}>
-          <Text style={s.label}>Category</Text>
-          <View style={s.segmented}>
-            {CATEGORIES.map(cat => (
-              <Pressable key={cat} style={[s.segBtn, category === cat && s.segBtnActive]} onPress={() => setCategory(cat)}>
-                <Text style={[s.segText, category === cat && s.segTextActive]}>{cat}</Text>
-              </Pressable>
-            ))}
-          </View>
+        {/* Category picker trigger */}
+        <View style={{ gap: spacing.xs }}>
+          <Text variant="footnote" tone="muted">Category</Text>
+          <ListRow
+            title={category}
+            trailing="chevron"
+            onPress={() => setCategoryPickerOpen(true)}
+            testID="newexpense-category-picker"
+          />
         </View>
 
-        <Pressable style={s.receiptBtn} onPress={handlePickReceipt} disabled={uploadingReceipt}>
-          {uploadingReceipt ? (
-            <View style={{ alignItems: 'center', gap: 8 }}>
-              <ActivityIndicator color={Colors.navy} />
-              <Text style={s.receiptBtnText}>Uploading & scanning receipt...</Text>
-            </View>
-          ) : receiptUri ? (
-            <View style={{ alignItems: 'center', gap: 8 }}>
-              <Image source={{ uri: receiptUri }} style={s.receiptPreview} resizeMode="cover" />
-              <Text style={s.receiptBtnText}>Tap to replace receipt</Text>
-            </View>
-          ) : (
-            <View style={{ alignItems: 'center', gap: 6 }}>
-              <Text style={s.receiptIcon}>📷</Text>
-              <Text style={s.receiptBtnText}>Add Receipt Photo</Text>
-              <Text style={s.receiptHint}>Take a photo or choose from library</Text>
-            </View>
-          )}
-        </Pressable>
-
-        <View style={s.field}>
-          <Text style={s.label}>Vendor / Store</Text>
-          <TextInput style={s.input} value={vendor} onChangeText={setVendor} placeholder="e.g. Home Depot" placeholderTextColor={Colors.mutedLight} />
+        {/* Receipt zone — dashed Card */}
+        <View style={{ gap: spacing.xs }}>
+          <Text variant="footnote" tone="muted">Receipt *</Text>
+          <Pressable
+            testID="newexpense-receipt-button"
+            onPress={handlePickReceipt}
+            disabled={uploadingReceipt}
+            style={{
+              borderRadius: radius.md,
+              borderWidth: 2,
+              borderColor: receiptError ? colors.danger : colors.border,
+              borderStyle: 'dashed',
+              padding: spacing.md,
+              alignItems: 'center',
+              backgroundColor: colors.card,
+            }}
+          >
+            {uploadingReceipt ? (
+              <View style={s.receiptInner}>
+                <ActivityIndicator color={colors.navy} />
+                <Text variant="subhead" weight="600">Uploading &amp; scanning receipt...</Text>
+              </View>
+            ) : receiptUri ? (
+              <View style={[s.receiptInner, { gap: spacing.sm }]}>
+                <Image source={{ uri: receiptUri }} style={[s.receiptPreview, { borderRadius: radius.sm }]} resizeMode="cover" />
+                <Text variant="subhead" weight="600" tone="default">Tap to replace receipt</Text>
+              </View>
+            ) : (
+              <View style={s.receiptInner}>
+                <IconSymbol name={'camera.fill' as never} size={28} color={colors.mutedLight} />
+                <RNText style={{ fontSize: 15, fontWeight: '700', lineHeight: 21, color: colors.navy }}>Add Receipt Photo</RNText>
+                <Text variant="footnote" tone="muted">Take a photo or choose from library</Text>
+              </View>
+            )}
+          </Pressable>
+          {receiptError ? (
+            <Text variant="footnote" tone="danger">{receiptError}</Text>
+          ) : null}
         </View>
 
-        <View style={s.field}>
-          <Text style={s.label}>Amount *</Text>
-          <TextInput style={s.input} value={amount} onChangeText={setAmount} placeholder="0.00" keyboardType="decimal-pad" placeholderTextColor={Colors.mutedLight} />
-        </View>
+        {/* Vendor input */}
+        <Input
+          label="Vendor / Store"
+          value={vendor}
+          onChangeText={setVendor}
+          placeholder="e.g. Home Depot"
+        />
 
-        <View style={s.field}>
-          <Text style={s.label}>Date</Text>
-          <TextInput style={s.input} value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" placeholderTextColor={Colors.mutedLight} />
-        </View>
+        {/* Amount input */}
+        <Input
+          label="Amount *"
+          value={amount}
+          onChangeText={(v) => { setAmount(v); if (amountError) setAmountError(undefined); }}
+          placeholder="0.00"
+          keyboardType="decimal-pad"
+          error={amountError}
+        />
 
-        <Pressable style={[s.saveBtn, saving && s.btnDisabled]} onPress={() => void handleSave()} disabled={saving}>
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Save Expense</Text>}
-        </Pressable>
+        {/* Date input */}
+        <Input
+          label="Date"
+          value={date}
+          onChangeText={setDate}
+          placeholder="YYYY-MM-DD"
+        />
 
       </ScrollView>
-    </SafeAreaView>
+
+      {/* Save button pinned outside ScrollView */}
+      <View style={{ padding: spacing.md }}>
+        <Button
+          variant="primary"
+          size="lg"
+          fullWidth
+          label="Save Expense"
+          loading={saving}
+          onPress={() => void handleSave()}
+          testID="newexpense-save-button"
+        />
+      </View>
+
+      {/* ── Sheets — siblings at root level, NEVER inside ScrollView ── */}
+
+      {/* Receipt source sheet (Pattern C) */}
+      {receiptSheetOpen && (
+        <Sheet
+          fitContent
+          onClose={() => setReceiptSheetOpen(false)}
+          testID="newexpense-receipt-sheet"
+        >
+          <ListRow
+            title="Take Photo"
+            leadingIcon={'camera' as never}
+            onPress={() => { setReceiptSheetOpen(false); void launchCamera(); }}
+            testID="receipt-camera"
+          />
+          <ListRow
+            title="Choose from Library"
+            leadingIcon={'photo' as never}
+            onPress={() => { setReceiptSheetOpen(false); void launchLibrary(); }}
+            testID="receipt-library"
+          />
+        </Sheet>
+      )}
+
+      {/* Job picker sheet (Pattern B) */}
+      {jobPickerOpen && (
+        <Sheet
+          snapPoints={['50%', '85%']}
+          scrollable
+          onClose={() => setJobPickerOpen(false)}
+          header={
+            <View style={s.pickerHeader}>
+              <Text variant="headline" weight="600">Select Job</Text>
+            </View>
+          }
+        >
+          {jobs.map(j => (
+            <ListRow
+              key={j.id}
+              title={j.jobName ?? 'Untitled'}
+              trailing={selectedJobId === j.id ? 'custom' : 'none'}
+              trailingCustom={
+                selectedJobId === j.id
+                  ? <IconSymbol name={'checkmark' as never} size={18} color={colors.navy} />
+                  : undefined
+              }
+              onPress={() => {
+                setSelectedJobId(j.id);
+                setJobPickerOpen(false);
+                setJobError(undefined);
+              }}
+            />
+          ))}
+        </Sheet>
+      )}
+
+      {/* Category picker sheet (Pattern B, fitContent — 6 fixed rows) */}
+      {categoryPickerOpen && (
+        <Sheet
+          fitContent
+          onClose={() => setCategoryPickerOpen(false)}
+          testID="newexpense-category-picker"
+          header={
+            <View style={s.pickerHeader}>
+              <Text variant="headline" weight="600">Category</Text>
+            </View>
+          }
+        >
+          {CATEGORIES.map(cat => (
+            <ListRow
+              key={cat}
+              title={cat}
+              trailing={category === cat ? 'custom' : 'none'}
+              trailingCustom={
+                category === cat
+                  ? <IconSymbol name={'checkmark' as never} size={18} color={colors.navy} />
+                  : undefined
+              }
+              onPress={() => {
+                setCategory(cat);
+                setCategoryPickerOpen(false);
+              }}
+            />
+          ))}
+        </Sheet>
+      )}
+    </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  scroll: { padding: Spacing.md, gap: Spacing.md },
-  field: { gap: 6 },
-  label: { fontSize: 13, fontWeight: '600', color: Colors.muted },
-  pills: { flexDirection: 'row', gap: 8, paddingHorizontal: 2 },
-  pill: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 99, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card },
-  pillActive: { backgroundColor: Colors.navy, borderColor: Colors.navy },
-  pillText: { fontSize: 13, fontWeight: '600', color: Colors.muted },
-  pillTextActive: { color: '#fff' },
-  segmented: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  segBtn: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card },
-  segBtnActive: { backgroundColor: Colors.navy, borderColor: Colors.navy },
-  segText: { fontSize: 12, fontWeight: '600', color: Colors.muted },
-  segTextActive: { color: '#fff' },
-  receiptBtn: { backgroundColor: Colors.card, borderRadius: Radius.md, padding: 20, alignItems: 'center', borderWidth: 2, borderColor: Colors.border, borderStyle: 'dashed' },
-  receiptIcon: { fontSize: 28 },
-  receiptBtnText: { fontSize: 14, fontWeight: '700', color: Colors.navy },
-  receiptHint: { fontSize: 12, color: Colors.muted },
-  receiptPreview: { width: 120, height: 120, borderRadius: Radius.sm },
-  input: { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: 12, fontSize: 15, color: Colors.text, backgroundColor: Colors.card },
-  saveBtn: { backgroundColor: Colors.navy, borderRadius: Radius.md, padding: 14, alignItems: 'center', marginTop: 8 },
-  saveBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
-  btnDisabled: { opacity: 0.6 },
+  receiptInner: { alignItems: 'center', gap: 8 },
+  receiptPreview: { width: 120, height: 120 },
+  pickerHeader: { minHeight: 44, justifyContent: 'center', alignItems: 'center' },
 });
