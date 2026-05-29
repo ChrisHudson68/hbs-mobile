@@ -1,0 +1,49 @@
+# Phase 5 E2E: manager → invoice list → invoice detail → PDF share
+# Exercises the protected handleSharePdf via the preserved invoice-pdf-share-button testID.
+# Credentials via -e SUBDOMAIN/EMAIL/PASSWORD — must be a manager/admin account.
+# Runs on the iOS SIMULATOR only (physical-iOS driver fails on Xcode 26).
+# appId = com.hbs.mobile (temp org-team bundle id; revert when Hudson org conversion lands).
+appId: com.hbs.mobile
+---
+# --- Login (manager account required for PDF share to be visible) ---
+- runFlow: login.yaml
+
+# --- Navigate to Invoices tab ---
+# Tab order: Dashboard(10%) Jobs(30%) Timesheets(50%) Invoices(70%) More(90%)
+- tapOn:
+    point: "70%,95%"
+- waitForAnimationToEnd
+
+# --- Wait for Invoices list to load ---
+- extendedWaitUntil:
+    visible:
+      id: "invoices-card-0"
+    timeout: 15000
+- assertVisible:
+    id: "invoices-card-0"
+
+# --- Open the first invoice (card-0) ---
+- tapOn:
+    id: "invoices-card-0"
+- waitForAnimationToEnd
+
+# --- Wait for Invoice detail to load (PDF share button is in the hero card) ---
+- extendedWaitUntil:
+    visible:
+      id: "invoice-pdf-share-button"
+    timeout: 15000
+- assertVisible:
+    id: "invoice-pdf-share-button"
+
+# --- Tap PDF share button (invokes the protected handleSharePdf) ---
+- tapOn:
+    id: "invoice-pdf-share-button"
+# The iOS share sheet / activity view should appear.
+# Dismiss the share sheet by swiping down or tapping outside.
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%,10%"
+    optional: true
+- tapOn:
+    text: "Cancel"
+    optional: true
