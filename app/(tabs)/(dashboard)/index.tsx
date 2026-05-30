@@ -1,18 +1,24 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text as RNText,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useAuth } from '../../../src/mobile/context/AuthContext';
 import { useAppState } from '../../../src/mobile/context/AppStateContext';
 import { useApi } from '../../../src/mobile/hooks/useApi';
-import { useTheme } from '../../../src/mobile/theme';
+import { Motion, useTheme } from '../../../src/mobile/theme';
+import { motionEasing } from '../../../src/mobile/utils/motionEasing';
 import type { Invoice, JobListItem, TimesheetsResponse } from '../../../src/mobile/types';
 import {
   buildDashboardMetrics,
@@ -29,6 +35,7 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { ListRow } from '@/components/ui/ListRow';
 import { SectionHeader } from '@/components/ui/SectionHeader';
+import { SkeletonBlock } from '@/components/ui/SkeletonBlock';
 
 function greeting(name: string) {
   const h = new Date().getHours();
@@ -42,6 +49,7 @@ export default function DashboardScreen() {
   const router = useRouter();
   const { isClockedIn } = useAppState();
   const { colors, spacing, radius } = useTheme();
+  const { width: screenWidth } = useWindowDimensions();
 
   const [jobs, setJobs] = useState<JobListItem[]>([]);
   const [jobSearch, setJobSearch] = useState('');
@@ -79,6 +87,22 @@ export default function DashboardScreen() {
     return () => clearInterval(t);
   }, [timesheetData?.activeClockEntry]);
 
+  // Content fade-in (MOTION-01 / D-10): a single 150ms decelerate fade once
+  // loading flips false. No staggered cascade, no count-up. Worklet-safe via
+  // sv.get()/sv.set() (D-12).
+  const contentOpacity = useSharedValue(0);
+  useEffect(() => {
+    if (!loading) {
+      contentOpacity.set(
+        withTiming(1, {
+          duration: Motion.fast.duration,
+          easing: motionEasing(Motion.fast.easing),
+        }),
+      );
+    }
+  }, [loading, contentOpacity]);
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: contentOpacity.get() }));
+
   const metrics = buildDashboardMetrics(jobs);
   const activeEntry = timesheetData?.activeClockEntry;
   const weekHours = timesheetData?.summary?.totalHours ?? 0;
@@ -102,10 +126,25 @@ export default function DashboardScreen() {
   const hoursPercent = Math.min(1, weekHours / hoursGoal);
 
   if (loading) {
+    const statWidth = (screenWidth - spacing.md * 3) / 2;
     return (
-      <Screen headerMode="native">
-        <View style={s.center}>
-          <ActivityIndicator size="large" color={colors.navy} />
+      <Screen headerMode="native" padded={false} testID="dashboard-skeleton">
+        <View style={{ padding: spacing.md, gap: spacing.md }}>
+          {/* 2×2 grid of stat-card placeholders */}
+          <View style={{ flexDirection: 'row', gap: spacing.md }}>
+            <SkeletonBlock width={statWidth} height={80} borderRadius={radius.md} />
+            <SkeletonBlock width={statWidth} height={80} borderRadius={radius.md} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: spacing.md }}>
+            <SkeletonBlock width={statWidth} height={80} borderRadius={radius.md} />
+            <SkeletonBlock width={statWidth} height={80} borderRadius={radius.md} />
+          </View>
+          {/* Wide activity-card placeholder */}
+          <SkeletonBlock
+            width={screenWidth - spacing.md * 2}
+            height={120}
+            borderRadius={radius.md}
+          />
         </View>
       </Screen>
     );
@@ -113,6 +152,7 @@ export default function DashboardScreen() {
 
   return (
     <Screen headerMode="native" padded={false}>
+      <Animated.View style={[s.fill, fadeStyle]}>
       <ScrollView
         contentContainerStyle={{ padding: spacing.md, gap: spacing.md, paddingBottom: 32 }}
         contentInsetAdjustmentBehavior="automatic"
@@ -135,7 +175,7 @@ export default function DashboardScreen() {
           <View style={s.section}>
             {searchResults.length === 0 ? (
               <RNText style={{ textAlign: 'center', color: colors.muted, paddingVertical: spacing.sm, fontSize: 15 }}>
-                No jobs match "{jobSearch}"
+                No jobs match &ldquo;{jobSearch}&rdquo;
               </RNText>
             ) : (
               searchResults.map(job => (
@@ -438,12 +478,14 @@ export default function DashboardScreen() {
           </>
         )}
       </ScrollView>
+      </Animated.View>
     </Screen>
   );
 }
 
 const s = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  fill: { flex: 1 },
   section: { gap: 8 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   weekRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 10 },
