@@ -12,12 +12,13 @@ import { useAuth } from '../../src/mobile/context/AuthContext';
 import { CONFIG } from '../../src/mobile/constants';
 import { useTheme } from '../../src/mobile/theme';
 import type { InvoiceDetail } from '../../src/mobile/types';
-import { formatCurrency, formatDate, isManagerOrAdmin } from '../../src/mobile/utils';
+import { formatCurrency, formatDate, formatDateInputValue, isManagerOrAdmin } from '../../src/mobile/utils';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { DateField } from '@/components/ui/DateField';
 import { Input } from '@/components/ui/Input';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -309,7 +310,7 @@ export default function InvoiceDetailScreen() {
       {paymentSheetOpen && (
         <Sheet
           testID="invoice-payment-sheet"
-          snapPoints={['55%']}
+          snapPoints={['70%', '92%']}
           scrollable
           onClose={() => setPaymentSheetOpen(false)}
           header={
@@ -329,12 +330,13 @@ export default function InvoiceDetailScreen() {
             onChangeText={(v) => { setPayAmount(v); if (payAmountError) setPayAmountError(undefined); }}
             keyboardType="decimal-pad"
             error={payAmountError}
+            bottomSheet
           />
-          <Input
+          <DateField
             label="Date"
-            placeholder="YYYY-MM-DD"
-            value={payDate}
-            onChangeText={setPayDate}
+            value={payDate ? new Date(`${payDate}T00:00:00`) : null}
+            onChange={(d) => setPayDate(formatDateInputValue(d))}
+            testID="invoice-payment-date"
           />
           <View style={{ gap: spacing.xs }}>
             <Text variant="footnote" tone="muted" weight="600">Method</Text>
@@ -368,6 +370,7 @@ export default function InvoiceDetailScreen() {
             placeholder="Reference / Check # (optional)"
             value={payRef}
             onChangeText={setPayRef}
+            bottomSheet
           />
         </Sheet>
       )}
