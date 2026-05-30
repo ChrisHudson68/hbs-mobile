@@ -1,15 +1,20 @@
-import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, ScrollView, StyleSheet, TextInput, View,
+  ActivityIndicator, Alert, StyleSheet, TextInput, View,
 } from 'react-native';
-import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApi } from '../../src/mobile/hooks/useApi';
 import { useTheme } from '../../src/mobile/theme';
+import {
+  formatDateInputValue,
+  validateAmount,
+  validateDate,
+  validateRequired,
+} from '../../src/mobile/utils';
 import type { JobListItem } from '../../src/mobile/types';
 import { Button } from '@/components/ui/Button';
+import { DateField } from '@/components/ui/DateField';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Input } from '@/components/ui/Input';
 import { ListRow } from '@/components/ui/ListRow';
@@ -46,8 +51,6 @@ export default function NewInvoiceScreen() {
   const navigation = useNavigation();
   const api = useApi();
   const { colors, spacing, radius } = useTheme();
-  const frame = useSafeAreaFrame();
-  const insets = useSafeAreaInsets();
   const { jobId: preselectedJobId } = useLocalSearchParams<{ jobId?: string }>();
 
   // --- data -----------------------------------------------------------------
@@ -58,8 +61,8 @@ export default function NewInvoiceScreen() {
   const [selectedJobId, setSelectedJobId] = useState<number | null>(
     preselectedJobId ? Number(preselectedJobId) : null,
   );
-  const [dateIssued, setDateIssued] = useState(new Date().toISOString().slice(0, 10));
-  /** Internal Date object for the native picker; serialised to YYYY-MM-DD on save. */
+  /** Date objects for the pickers; serialised to YYYY-MM-DD on save. */
+  const [dateIssued, setDateIssued] = useState<Date | null>(new Date());
   const [due, setDue] = useState<Date | null>(null);
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
@@ -69,10 +72,10 @@ export default function NewInvoiceScreen() {
   const [jobError, setJobError] = useState<string | undefined>(undefined);
   const [amountError, setAmountError] = useState<string | undefined>(undefined);
   const [dueError, setDueError] = useState<string | undefined>(undefined);
+  const [dateIssuedError, setDateIssuedError] = useState<string | undefined>(undefined);
 
   // --- UI state (pickers/sheets) -------------------------------------------
   const [jobPickerOpen, setJobPickerOpen] = useState(false);
-  const [showDuePicker, setShowDuePicker] = useState(false);
 
   // --- derived --------------------------------------------------------------
   const selectedJob = jobs.find(j => j.id === selectedJobId) ?? null;
@@ -119,22 +122,23 @@ export default function NewInvoiceScreen() {
 
   // --- save -----------------------------------------------------------------
   const handleSave = async () => {
-    let hasError = false;
+    const nextJobError = selectedJobId ? undefined : validateRequired('', 'Job');
+    const nextAmountError = validateAmount(amount, 'invoice amount');
+    const nextDueError = due
+      ? undefined
+      : validateRequired('', 'Due date');
+    // A DateField that yields a Date never needs free-text date validation, but
+    // run validateDate on the serialised value as a defensive guard.
+    const nextDateIssuedError = dateIssued
+      ? validateDate(formatDateInputValue(dateIssued))
+      : validateRequired('', 'Date issued');
 
-    if (!selectedJobId) {
-      setJobError('Select a job');
-      hasError = true;
-    }
-    const amt = parseFloat(amount);
-    if (!amount.trim() || isNaN(amt) || amt <= 0) {
-      setAmountError('Enter a valid invoice amount');
-      hasError = true;
-    }
-    if (!due) {
-      setDueError('Enter a due date');
-      hasError = true;
-    }
-    if (hasError) {
+    setJobError(nextJobError);
+    setAmountError(nextAmountError);
+    setDueError(nextDueError);
+    setDateIssuedError(nextDateIssuedError);
+
+    if (nextJobError || nextAmountError || nextDueError || nextDateIssuedError) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
@@ -143,11 +147,9 @@ export default function NewInvoiceScreen() {
     try {
       const res = await api.createInvoice({
         jobId: selectedJobId!,
-        dateIssued,
-        // Wire format: YYYY-MM-DD string — byte-identical to dateIssued convention
-        // (toISOString().slice(0,10) matches what the typed field sent before).
-        dueDate: due!.toISOString().slice(0, 10),
-        amount: amt,
+        dateIssued: formatDateInputValue(dateIssued!),
+        dueDate: formatDateInputValue(due!),
+        amount: Number(amount.trim().replace(/^\$/, '').replace(/,/g, '')),
         notes: notes.trim() || undefined,
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -175,15 +177,8 @@ export default function NewInvoiceScreen() {
 
   // --- render ---------------------------------------------------------------
   return (
-    <Screen headerMode="native" padded={false} keyboardAvoiding>
-      <View style={{ height: frame.height - insets.top }}>
-      {/* Main form in a ScrollView (keyboard-aware via Screen keyboardAvoiding) */}
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: spacing.md, gap: spacing.md, paddingBottom: 8 }}
-        contentInsetAdjustmentBehavior="automatic"
-        keyboardShouldPersistTaps="handled"
-      >
+    <Screen headerMode="native" scroll keyboardAvoiding>
+      <View style={{ gap: spacing.md, paddingVertical: spacing.md }}>
         {/* Job picker trigger (D-05) */}
         <View>
           <Text variant="footnote" tone="muted" style={{ marginBottom: spacing.xs }}>
@@ -213,43 +208,23 @@ export default function NewInvoiceScreen() {
           testID="newinvoice-amount-input"
         />
 
-        {/* Date Issued — keep as Input (typed), same as before */}
-        <Input
-          label="Date Issued"
+        {/* Date Issued — DateField (D-07) */}
+        <DateField
+          label="Date Issued *"
           value={dateIssued}
-          onChangeText={setDateIssued}
-          placeholder="YYYY-MM-DD"
-          leftIcon="calendar"
+          onChange={(d) => { setDateIssued(d); if (dateIssuedError) setDateIssuedError(undefined); }}
+          error={dateIssuedError}
+          testID="newinvoice-dateissued-picker"
         />
 
-        {/* Due Date — native iOS DateTimePicker (D-07) */}
-        <View>
-          <Text variant="footnote" tone="muted" style={{ marginBottom: spacing.xs }}>
-            Due Date *
-          </Text>
-          <ListRow
-            title={due ? due.toISOString().slice(0, 10) : 'Tap to pick a date'}
-            trailing="chevron"
-            onPress={() => { setShowDuePicker(v => !v); if (dueError) setDueError(undefined); }}
-          />
-          {showDuePicker && (
-            <DateTimePicker
-              value={due ?? new Date()}
-              mode="date"
-              display="inline"
-              onChange={(_, d) => {
-                if (d) { setDue(d); if (dueError) setDueError(undefined); }
-              }}
-              testID="newinvoice-duedate-picker"
-              style={{ marginTop: spacing.xs }}
-            />
-          )}
-          {dueError ? (
-            <Text variant="footnote" tone="danger" numberOfLines={1} style={{ marginTop: spacing.xs }}>
-              {dueError}
-            </Text>
-          ) : null}
-        </View>
+        {/* Due Date — DateField (D-07) */}
+        <DateField
+          label="Due Date *"
+          value={due}
+          onChange={(d) => { setDue(d); if (dueError) setDueError(undefined); }}
+          error={dueError}
+          testID="newinvoice-duedate-picker"
+        />
 
         {/* Notes — raw TextInput (kit Input has no multiline prop, known Bug 2) */}
         <View style={{ gap: spacing.xs }}>
@@ -269,10 +244,8 @@ export default function NewInvoiceScreen() {
             multiline
           />
         </View>
-      </ScrollView>
 
-      {/* Bottom-pinned primary CTA (outside ScrollView) */}
-      <View style={{ padding: spacing.md }}>
+        {/* Primary CTA — scrolls above the keyboard with the form */}
         <Button
           variant="primary"
           size="lg"
@@ -282,7 +255,6 @@ export default function NewInvoiceScreen() {
           onPress={() => void handleSave()}
           testID="newinvoice-save-button"
         />
-      </View>
       </View>
 
       {/* Job picker Sheet — sibling, NEVER inside ScrollView (gorhom-sheet-anchoring) */}
