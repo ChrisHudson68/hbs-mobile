@@ -1,7 +1,7 @@
 import { File, Paths } from 'expo-file-system';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Pressable, RefreshControl,
   ScrollView, StyleSheet, View,
@@ -57,7 +57,7 @@ function SheetHeader({
 }
 
 export default function InvoiceDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, action } = useLocalSearchParams<{ id: string; action?: string }>();
   const api = useApi();
   const navigation = useNavigation();
   const { user, token, tenantSubdomain } = useAuth();
@@ -92,6 +92,24 @@ export default function InvoiceDetailScreen() {
   }, [api, invoiceId, navigation]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // One-shot action-param dispatcher: fires the existing handler once after
+  // the invoice has loaded. Keeps handleSharePdf / handleRecordPayment bodies
+  // byte-for-byte unchanged (protected regions — 06-07 range-hash gate).
+  const actionFiredRef = useRef(false);
+  const handleSharePdfRef = useRef(handleSharePdf);
+  handleSharePdfRef.current = handleSharePdf;
+  const canManageRef = useRef(canManage);
+  canManageRef.current = canManage;
+  useEffect(() => {
+    if (!action || loading || !invoice || actionFiredRef.current) return;
+    actionFiredRef.current = true;
+    if (action === 'share') {
+      void handleSharePdfRef.current();
+    } else if (action === 'recordPayment' && canManageRef.current) {
+      setPaymentSheetOpen(true);
+    }
+  }, [action, loading, invoice]);
 
   const handleSharePdf = async () => {
     if (!invoice) return;
