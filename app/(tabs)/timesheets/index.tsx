@@ -454,9 +454,16 @@ export default function TimesheetsScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             await api.deleteTimeEntry(entryId);
-            await load();
+            // Optimistically drop the row so the slide-out animates THIS commit (D-10).
+            // load() with no args sets loading=true and swaps the whole screen to the
+            // full-screen skeleton, so configureNext would animate content→skeleton, not
+            // the row removal. Reconcile silently via refresh mode.
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setTsData((prev) =>
+              prev ? { ...prev, timesheets: (prev.timesheets ?? []).filter((e) => e.id !== entryId) } : prev,
+            );
+            void load(true);
           } catch (e) {
             Alert.alert('Error', e instanceof Error ? e.message : 'Failed to delete');
           }
