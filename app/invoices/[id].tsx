@@ -80,7 +80,7 @@ export default function InvoiceDetailScreen() {
 
   const load = useCallback(async (isRefresh = false) => {
     if (!invoiceId) return;
-    isRefresh ? setRefreshing(true) : setLoading(true);
+    if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const res = await api.getInvoice(invoiceId);
       if (res.invoice) {
@@ -88,7 +88,7 @@ export default function InvoiceDetailScreen() {
         navigation.setOptions({ title: res.invoice.invoiceNumber ?? `Invoice #${invoiceId}` });
       }
     } catch { /* ignore */ }
-    finally { isRefresh ? setRefreshing(false) : setLoading(false); }
+    finally { if (isRefresh) setRefreshing(false); else setLoading(false); }
   }, [api, invoiceId, navigation]);
 
   useEffect(() => { void load(); }, [load]);

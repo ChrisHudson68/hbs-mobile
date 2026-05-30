@@ -187,7 +187,7 @@ export default function JobDetailScreen() {
 
   const load = useCallback(async (isRefresh = false) => {
     if (!jobId) return;
-    isRefresh ? setRefreshing(true) : setLoading(true);
+    if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const [jobRes, incomeRes, expRes, timeRes] = await Promise.all([
         api.getJobDetail(jobId),
@@ -203,7 +203,7 @@ export default function JobDetailScreen() {
       if (expRes?.expenses) setExpenseList(expRes.expenses);
       if (timeRes?.entries) setTimeEntries(timeRes.entries);
     } catch { /* ignore */ }
-    finally { isRefresh ? setRefreshing(false) : setLoading(false); }
+    finally { if (isRefresh) setRefreshing(false); else setLoading(false); }
   }, [api, jobId, canManage, navigation]);
 
   useEffect(() => { void load(); }, [load]);

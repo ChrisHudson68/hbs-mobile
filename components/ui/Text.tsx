@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { StyleSheet, Text as RNText, TextStyle } from 'react-native';
+import { StyleProp, StyleSheet, Text as RNText, TextStyle } from 'react-native';
 
 import { useTheme } from '../../src/mobile/theme';
 
@@ -28,6 +28,8 @@ type TextProps = {
   /** Overrides the variant's default fontWeight. */
   weight?: TextWeight;
   numberOfLines?: number;
+  /** Optional style override, merged after the computed token style. */
+  style?: StyleProp<TextStyle>;
   testID?: string;
 };
 
@@ -42,6 +44,7 @@ export function Text({
   tone = 'default',
   weight,
   numberOfLines,
+  style: styleOverride,
   testID,
 }: TextProps) {
   const { colors, typographyRamp } = useTheme();
@@ -65,7 +68,7 @@ export function Text({
   };
 
   return (
-    <RNText style={[s.base, style]} numberOfLines={numberOfLines} testID={testID}>
+    <RNText style={[s.base, style, styleOverride]} numberOfLines={numberOfLines} testID={testID}>
       {children}
     </RNText>
   );

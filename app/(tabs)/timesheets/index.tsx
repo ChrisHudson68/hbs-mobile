@@ -251,7 +251,7 @@ export default function TimesheetsScreen() {
   const isViewingOwnSheet = !selectedEmployeeId;
 
   const load = useCallback(async (isRefresh = false) => {
-    isRefresh ? setRefreshing(true) : setLoading(true);
+    if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const [ts, jobsRes, clockJobsRes, empRes, editReqRes] = await Promise.all([
         api.getTimesheets(selectedEmployeeId ? { employeeId: selectedEmployeeId, start: weekAnchor } : { start: weekAnchor }),
@@ -266,7 +266,7 @@ export default function TimesheetsScreen() {
       if (empRes?.employees) setEmployees(empRes.employees.filter(e => e.active));
       if (editReqRes?.requests) setEditRequests(editReqRes.requests);
     } catch { /* ignore */ }
-    finally { isRefresh ? setRefreshing(false) : setLoading(false); }
+    finally { if (isRefresh) setRefreshing(false); else setLoading(false); }
   }, [api, canClock, canViewJobs, canManage, canApprove, selectedEmployeeId, weekAnchor]);
 
   useEffect(() => { void load(); }, [load]);

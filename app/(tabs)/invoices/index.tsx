@@ -157,12 +157,12 @@ export default function InvoicesScreen() {
 
   // Pattern H: unchanged data load
   const load = useCallback(async (isRefresh = false) => {
-    isRefresh ? setRefreshing(true) : setLoading(true);
+    if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const res = await api.getInvoices();
       setInvoices(res.invoices ?? []);
     } catch { /* ignore */ }
-    finally { isRefresh ? setRefreshing(false) : setLoading(false); }
+    finally { if (isRefresh) setRefreshing(false); else setLoading(false); }
   }, [api]);
 
   useEffect(() => { void load(); }, [load]);

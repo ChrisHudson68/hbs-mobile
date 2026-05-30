@@ -69,12 +69,12 @@ export default function JobsScreen() {
   const canManage = isManagerOrAdmin(user);
 
   const load = useCallback(async (isRefresh = false) => {
-    isRefresh ? setRefreshing(true) : setLoading(true);
+    if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const res = await api.getJobs();
       setJobs(res.jobs ?? []);
     } catch { /* ignore */ }
-    finally { isRefresh ? setRefreshing(false) : setLoading(false); }
+    finally { if (isRefresh) setRefreshing(false); else setLoading(false); }
   }, [api]);
 
   useEffect(() => { void load(); }, [load]);

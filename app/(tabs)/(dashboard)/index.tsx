@@ -15,7 +15,6 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useAuth } from '../../../src/mobile/context/AuthContext';
-import { useAppState } from '../../../src/mobile/context/AppStateContext';
 import { useApi } from '../../../src/mobile/hooks/useApi';
 import { Motion, useTheme } from '../../../src/mobile/theme';
 import { motionEasing } from '../../../src/mobile/utils/motionEasing';
@@ -37,17 +36,10 @@ import { ListRow } from '@/components/ui/ListRow';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { SkeletonBlock } from '@/components/ui/SkeletonBlock';
 
-function greeting(name: string) {
-  const h = new Date().getHours();
-  const salutation = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-  return `${salutation}, ${name.split(' ')[0]}`;
-}
-
 export default function DashboardScreen() {
   const { user } = useAuth();
   const api = useApi();
   const router = useRouter();
-  const { isClockedIn } = useAppState();
   const { colors, spacing, radius } = useTheme();
   const { width: screenWidth } = useWindowDimensions();
 
@@ -62,7 +54,7 @@ export default function DashboardScreen() {
   const canManage = isManagerOrAdmin(user);
 
   const load = useCallback(async (isRefresh = false) => {
-    isRefresh ? setRefreshing(true) : setLoading(true);
+    if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const [jobsRes, tsRes, invRes] = await Promise.all([
         api.getJobs().catch(() => null),
@@ -73,7 +65,7 @@ export default function DashboardScreen() {
       if (tsRes) setTimesheetData(tsRes);
       if (invRes?.invoices) setInvoices(invRes.invoices);
     } catch { /* ignore */ }
-    finally { isRefresh ? setRefreshing(false) : setLoading(false); }
+    finally { if (isRefresh) setRefreshing(false); else setLoading(false); }
   }, [api, canManage]);
 
   useEffect(() => { void load(); }, [load]);
