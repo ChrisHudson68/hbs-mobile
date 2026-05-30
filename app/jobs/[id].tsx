@@ -275,9 +275,13 @@ export default function JobDetailScreen() {
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try {
           await api.deleteExpense(expenseId);
-          // Slide the deleted row out before the list re-renders (D-10).
+          // Optimistically drop the row so the slide-out animates THIS commit (D-10).
+          // load() with no args sets loading=true and swaps the whole screen to the
+          // full-screen skeleton, so configureNext would animate content→skeleton, not
+          // the row removal. Reconcile job rollups silently via refresh mode.
           LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-          await load();
+          setExpenseList((prev) => prev.filter((x) => x.id !== expenseId));
+          void load(true);
         }
         catch (e) { Alert.alert('Error', e instanceof Error ? e.message : 'Failed'); }
       }},
@@ -290,9 +294,13 @@ export default function JobDetailScreen() {
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try {
           await api.deleteTimeEntry(entryId);
-          // Slide the deleted row out before the list re-renders (D-10).
+          // Optimistically drop the row so the slide-out animates THIS commit (D-10).
+          // load() with no args sets loading=true and swaps the whole screen to the
+          // full-screen skeleton, so configureNext would animate content→skeleton, not
+          // the row removal. Reconcile job rollups silently via refresh mode.
           LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-          await load();
+          setTimeEntries((prev) => prev.filter((x) => x.id !== entryId));
+          void load(true);
         }
         catch (e) { Alert.alert('Error', e instanceof Error ? e.message : 'Failed'); }
       }},
