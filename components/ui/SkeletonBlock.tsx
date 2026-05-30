@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, ViewStyle } from 'react-native';
 import Animated, {
   cancelAnimation,
   interpolate,
@@ -56,18 +56,17 @@ export function SkeletonBlock({
     ],
   }));
 
+  const blockStyle: ViewStyle = {
+    width: width as ViewStyle['width'],
+    height,
+    borderRadius: effectiveBorderRadius,
+    backgroundColor: colors.border,
+  };
+
   return (
     <View
       testID={testID}
-      style={[
-        s.container,
-        {
-          width,
-          height,
-          borderRadius: effectiveBorderRadius,
-          backgroundColor: colors.border,
-        },
-      ]}
+      style={[s.container, blockStyle]}
     >
       <Animated.View style={[s.shimmer, shimmerStyle]}>
         <LinearGradient
