@@ -295,3 +295,34 @@ export function buildReceiptConfidenceText(receipt: UploadedReceipt | null) {
   if (receipt.hasSuggestions) return 'OCR found useful suggestions you can review below.';
   return 'Receipt uploaded successfully, but OCR did not find strong suggestions.';
 }
+
+// Form validators — each returns an error message string, or undefined when valid.
+// Designed to slot into the `useState<string | undefined>()` + `<Input error={…} />` pattern.
+
+export function validateRequired(value: string, label = 'This field') {
+  return value.trim().length > 0 ? undefined : `${label} is required`;
+}
+
+export function validateAmount(value: string, label = 'Amount') {
+  const cleaned = value.trim().replace(/^\$/, '').replace(/,/g, '');
+  const amount = Number(cleaned);
+  if (Number.isFinite(amount) && amount > 0) return undefined;
+  return `Enter a valid ${label.toLowerCase()}`;
+}
+
+export function validateNumber(value: string, label = 'Number') {
+  return Number.isFinite(Number(value)) ? undefined : `Enter a valid ${label.toLowerCase()}`;
+}
+
+export function validateHours(value: string) {
+  const hours = Number(value);
+  if (Number.isFinite(hours) && hours > 0 && hours <= 24) return undefined;
+  return 'Enter valid hours (0–24)';
+}
+
+export function validateDate(value: string) {
+  if (value.trim().length === 0) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return 'Enter a valid date';
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? 'Enter a valid date' : undefined;
+}
