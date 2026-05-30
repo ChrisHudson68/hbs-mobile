@@ -1,10 +1,14 @@
 import { useNavigation, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
-import { useCallback, useEffect, useState } from 'react';
+import * as Haptics from 'expo-haptics';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Pressable, RefreshControl,
+  ActivityIndicator, Alert, LayoutAnimation, Pressable, RefreshControl,
   ScrollView, StyleSheet, Text as RNText, View,
 } from 'react-native';
+import Animated, { interpolate, useAnimatedStyle, Extrapolation } from 'react-native-reanimated';
+import type { SharedValue } from 'react-native-reanimated';
+import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { useAuth } from '../../../src/mobile/context/AuthContext';
 import { useApi } from '../../../src/mobile/hooks/useApi';
 import { useAppState } from '../../../src/mobile/context/AppStateContext';
@@ -22,6 +26,10 @@ import { ListRow } from '@/components/ui/ListRow';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { Sheet } from '@/components/ui/Sheet';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { SwipeRow, closeOpenSwipeRow } from '@/components/ui/SwipeRow';
+import { SkeletonBlock } from '@/components/ui/SkeletonBlock';
+import { SkeletonRow } from '@/components/ui/SkeletonRow';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 // ---------------------------------------------------------------------------
 // Pure helpers (unchanged)
@@ -53,6 +61,96 @@ function approvalTone(status: string | null): 'success' | 'danger' | 'warning' {
   if (status === 'approved') return 'success';
   if (status === 'rejected') return 'danger';
   return 'warning';
+}
+
+// ---------------------------------------------------------------------------
+// TimeRowSwipeActions — role-gated swipe panel for week time-entry rows.
+// Manager/Admin: Edit (navy/pencil) + Delete (danger/trash).
+// Employee: Request Edit only (infoBg/square.and.pencil).
+// Uses sv.get() via useAnimatedStyle — React Compiler-compliant (D-12).
+// Panel width: 144pt for manager (2 × 72pt), 72pt for employee (1 × 72pt).
+// ---------------------------------------------------------------------------
+
+const SWIPE_BUTTON_WIDTH = 72;
+
+type TimeRowSwipeActionsProps = {
+  drag: SharedValue<number>;
+  methods: SwipeableMethods;
+  isManager: boolean;
+  showRequestBtn: boolean;
+  entryId: number;
+  onEdit: () => void;
+  onDelete: () => void;
+  onRequestEdit: () => void;
+};
+
+function TimeRowSwipeActions({
+  drag,
+  methods,
+  isManager,
+  showRequestBtn,
+  entryId,
+  onEdit,
+  onDelete,
+  onRequestEdit,
+}: TimeRowSwipeActionsProps) {
+  const { colors, radius } = useTheme();
+  const panelWidth = isManager ? SWIPE_BUTTON_WIDTH * 2 : SWIPE_BUTTON_WIDTH;
+
+  // Translate the panel so it anchors to the right edge during the swipe
+  // (Pitfall 3: drag is negative for left-swipe / right-actions revealed).
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateX: interpolate(
+          drag.get(),
+          [-panelWidth, 0],
+          [0, panelWidth],
+          Extrapolation.CLAMP,
+        ),
+      },
+    ],
+  }));
+
+  if (isManager) {
+    return (
+      <Animated.View style={[{ width: panelWidth, flexDirection: 'row' }, animStyle]}>
+        <Pressable
+          style={[s.swipeBtn, { backgroundColor: colors.navy, borderRadius: radius.sm }]}
+          onPress={() => { methods.close(); onEdit(); }}
+          accessibilityLabel="Edit entry"
+          testID={`timesheet-edit-${entryId}`}
+        >
+          <IconSymbol name={'pencil' as never} size={20} color={colors.inverse} />
+        </Pressable>
+        <Pressable
+          style={[s.swipeBtn, { backgroundColor: colors.danger, borderRadius: radius.sm }]}
+          onPress={() => { methods.close(); onDelete(); }}
+          accessibilityLabel="Delete entry"
+          testID={`timesheet-delete-${entryId}`}
+        >
+          <IconSymbol name={'trash' as never} size={20} color={colors.inverse} />
+        </Pressable>
+      </Animated.View>
+    );
+  }
+
+  if (showRequestBtn) {
+    return (
+      <Animated.View style={[{ width: panelWidth }, animStyle]}>
+        <Pressable
+          style={[s.swipeBtn, { backgroundColor: colors.infoBg, borderRadius: radius.sm }]}
+          onPress={() => { methods.close(); onRequestEdit(); }}
+          accessibilityLabel="Request edit"
+          testID={`timesheet-request-edit-${entryId}`}
+        >
+          <IconSymbol name={'square.and.pencil' as never} size={20} color={colors.infoText} />
+        </Pressable>
+      </Animated.View>
+    );
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +215,7 @@ export default function TimesheetsScreen() {
   const [approveLoading, setApproveLoading] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
-  const { refresh: refreshAppState } = useAppState();
+  const { refresh: refreshAppState, isClockedIn } = useAppState();
 
   // Clock-out sheet (renamed from showClockOutNote)
   const [clockOutSheetOpen, setClockOutSheetOpen] = useState(false);
@@ -181,6 +279,33 @@ export default function TimesheetsScreen() {
     const t = setInterval(update, 1000);
     return () => clearInterval(t);
   }, [tsData?.activeClockEntry]);
+
+  // -------------------------------------------------------------------------
+  // Clock success haptic — fires ONLY on a real post-load clock-state change.
+  // Guards:
+  //   1. clockSyncReady: set only after the screen's initial loading=false.
+  //      Prevents buzzing during the post-mount AppStateContext false→true sync
+  //      transition (Pitfall 8 + 06-RESEARCH mount-guard pattern).
+  //   2. prevClockedIn ref: tracks the last seen value to detect real changes.
+  // DO NOT move this logic into handleClockIn/confirmClockOut (D-06).
+  // -------------------------------------------------------------------------
+  const prevClockedIn = useRef(isClockedIn);
+  const clockSyncReady = useRef(false);
+
+  useEffect(() => {
+    if (!clockSyncReady.current) {
+      // Keep prevClockedIn in sync while not ready; mark ready once loading clears.
+      prevClockedIn.current = isClockedIn;
+      if (!loading) {
+        clockSyncReady.current = true;
+      }
+      return;
+    }
+    if (prevClockedIn.current !== isClockedIn) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      prevClockedIn.current = isClockedIn;
+    }
+  }, [isClockedIn, loading]);
 
   // Wire up the + Add Entry header button
   useEffect(() => {
@@ -300,9 +425,13 @@ export default function TimesheetsScreen() {
         note: editNote.trim() || null,
         jobId: editJobId ?? undefined,
       });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setEditEntry(null);
       await load();
-    } catch (e) { Alert.alert('Error', e instanceof Error ? e.message : 'Failed'); }
+    } catch (e) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+    }
     finally { setEditSaving(false); }
   };
 
@@ -313,6 +442,27 @@ export default function TimesheetsScreen() {
     setReqNote(entry.note ?? '');
     setReqReason('');
     setReqReasonError(undefined);
+  };
+
+  // Manager-only delete handler — mirrors jobs/[id].tsx handleDeleteTimeEntry pattern.
+  // Server gates DELETE /api/timesheets/:id behind requireManagerOrAdmin.
+  const handleDeleteTimeEntry = (entryId: number) => {
+    Alert.alert('Delete Entry', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            await api.deleteTimeEntry(entryId);
+            await load();
+          } catch (e) {
+            Alert.alert('Error', e instanceof Error ? e.message : 'Failed to delete');
+          }
+        },
+      },
+    ]);
   };
 
   const confirmRequestEdit = async () => {
@@ -426,9 +576,12 @@ export default function TimesheetsScreen() {
 
   if (loading) {
     return (
-      <Screen headerMode="native">
-        <View style={s.center}>
-          <ActivityIndicator size="large" color={colors.navy} />
+      <Screen headerMode="native" testID="timesheets-skeleton">
+        <View style={{ padding: spacing.md, gap: 10 }}>
+          <SkeletonBlock width="100%" height={100} borderRadius={radius.md} />
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
         </View>
       </Screen>
     );
@@ -439,7 +592,8 @@ export default function TimesheetsScreen() {
       <ScrollView
         contentContainerStyle={{ padding: spacing.md, gap: spacing.md, paddingTop: spacing.sm }}
         contentInsetAdjustmentBehavior="automatic"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
+        onScrollBeginDrag={closeOpenSwipeRow}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); void load(true); }} />}
       >
 
         {/* Pending edit requests (manager / canApprove) */}
@@ -684,76 +838,70 @@ export default function TimesheetsScreen() {
 
         {/* Empty state */}
         {weekEntries.length === 0 && (
-          <View style={{ alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm }}>
-            <IconSymbol name={'clock' as never} size={48} color={colors.mutedLight} />
-            <Text variant="subhead" tone="muted">No entries for this week.</Text>
-          </View>
+          <EmptyState
+            icon="clock"
+            message="No hours logged this week."
+            actionLabel="Log Time"
+            onAction={() => router.push('/timesheets/manual')}
+            testID="timesheets-empty-state"
+          />
         )}
 
-        {/* Entry rows */}
+        {/* Entry rows — role-gated swipe-to-action via shared SwipeRow */}
         {weekEntries.map(entry => {
           const isPendingEdit = entry.approvalStatus === 'pending_edit';
           const showRequestBtn = !canManage && canRequestEdits && isViewingOwnSheet && !weekApproved && !isPendingEdit;
-          const showAdminEdit = canManage;
 
           return (
-            <Card key={entry.id} elevation="sm" padding="md" radius="md">
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text variant="headline" weight="600">{entry.jobName ?? 'General Time'}</Text>
-                  {canManage && !isViewingOwnSheet && (
-                    <Text variant="caption" tone="muted">{entry.employeeName}</Text>
-                  )}
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <RNText style={{ fontSize: 14, fontWeight: '700', color: colors.navy }}>
-                    {formatHours(entry.hours)}
-                  </RNText>
-                  {showAdminEdit && (
-                    <Pressable
-                      onPress={() => openAdminEdit(entry)}
-                      style={{
-                        paddingHorizontal: 8, paddingVertical: 4,
-                        borderRadius: radius.sm, borderWidth: 1,
-                        borderColor: colors.border, backgroundColor: colors.bg,
-                      }}
-                    >
-                      <RNText style={{ fontSize: 11, fontWeight: '700', color: colors.muted }}>Edit</RNText>
-                    </Pressable>
-                  )}
-                  {showRequestBtn && (
-                    <Pressable
-                      onPress={() => openRequestEdit(entry)}
-                      style={{
-                        paddingHorizontal: 8, paddingVertical: 4,
-                        borderRadius: radius.sm, borderWidth: 1,
-                        borderColor: colors.infoBorder, backgroundColor: colors.infoBg,
-                      }}
-                    >
-                      <RNText style={{ fontSize: 11, fontWeight: '700', color: colors.infoText }}>
-                        Request Edit
-                      </RNText>
-                    </Pressable>
-                  )}
-                  {isPendingEdit && !canManage && (
-                    <Badge tone="warning" label="Pending" />
-                  )}
-                </View>
-              </View>
-              <Text variant="caption" tone="muted">{formatDate(entry.date)}</Text>
-              {entry.note ? (
-                <Text variant="caption" tone="muted">{entry.note}</Text>
-              ) : null}
-              {entry.approvalStatus && (
-                <Badge
-                  tone={approvalTone(entry.approvalStatus)}
-                  label={entry.approvalStatus === 'pending_edit'
-                    ? 'Edit Pending'
-                    : entry.approvalStatus.charAt(0).toUpperCase() + entry.approvalStatus.slice(1)
-                  }
+            <SwipeRow
+              key={entry.id}
+              testID={`timesheet-row-${entry.id}`}
+              enabled={canManage || showRequestBtn}
+              renderActions={(drag, methods) => (
+                <TimeRowSwipeActions
+                  drag={drag}
+                  methods={methods}
+                  isManager={canManage}
+                  showRequestBtn={showRequestBtn}
+                  entryId={entry.id}
+                  onEdit={() => openAdminEdit(entry)}
+                  onDelete={() => handleDeleteTimeEntry(entry.id)}
+                  onRequestEdit={() => openRequestEdit(entry)}
                 />
               )}
-            </Card>
+            >
+              <Card elevation="sm" padding="md" radius="md">
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text variant="headline" weight="600">{entry.jobName ?? 'General Time'}</Text>
+                    {canManage && !isViewingOwnSheet && (
+                      <Text variant="caption" tone="muted">{entry.employeeName}</Text>
+                    )}
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <RNText style={{ fontSize: 14, fontWeight: '700', color: colors.navy }}>
+                      {formatHours(entry.hours)}
+                    </RNText>
+                    {isPendingEdit && !canManage && (
+                      <Badge tone="warning" label="Pending" />
+                    )}
+                  </View>
+                </View>
+                <Text variant="caption" tone="muted">{formatDate(entry.date)}</Text>
+                {entry.note ? (
+                  <Text variant="caption" tone="muted">{entry.note}</Text>
+                ) : null}
+                {entry.approvalStatus && (
+                  <Badge
+                    tone={approvalTone(entry.approvalStatus)}
+                    label={entry.approvalStatus === 'pending_edit'
+                      ? 'Edit Pending'
+                      : entry.approvalStatus.charAt(0).toUpperCase() + entry.approvalStatus.slice(1)
+                    }
+                  />
+                )}
+              </Card>
+            </SwipeRow>
           );
         })}
       </ScrollView>
@@ -957,5 +1105,10 @@ const s = StyleSheet.create({
     borderTopWidth: 3,
     alignItems: 'center',
     gap: 4,
+  },
+  swipeBtn: {
+    width: SWIPE_BUTTON_WIDTH,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
