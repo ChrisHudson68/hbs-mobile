@@ -323,6 +323,12 @@ export function validateHours(value: string) {
 export function validateDate(value: string) {
   if (value.trim().length === 0) return undefined;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return 'Enter a valid date';
+  const [y, m, d] = value.split('-').map(Number);
   const date = new Date(`${value}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? 'Enter a valid date' : undefined;
+  if (Number.isNaN(date.getTime())) return 'Enter a valid date';
+  // Reject calendar rollovers (e.g. 2026-02-30 → Mar 2): parsed components must match the input.
+  if (date.getFullYear() !== y || date.getMonth() + 1 !== m || date.getDate() !== d) {
+    return 'Enter a valid date';
+  }
+  return undefined;
 }
