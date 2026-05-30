@@ -6,11 +6,17 @@ import {
   ScrollView, StyleSheet, TextInput, View,
   ActivityIndicator,
 } from 'react-native';
-import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApi } from '../../src/mobile/hooks/useApi';
 import { useTheme } from '../../src/mobile/theme';
 import type { Employee, JobListItem } from '../../src/mobile/types';
+import {
+  formatDateInputValue,
+  validateDate,
+  validateHours,
+  validateRequired,
+} from '../../src/mobile/utils';
 import { Button } from '@/components/ui/Button';
+import { DateField } from '@/components/ui/DateField';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Input } from '@/components/ui/Input';
 import { ListRow } from '@/components/ui/ListRow';
@@ -58,8 +64,6 @@ export default function ManualTimeEntryScreen() {
   const api = useApi();
   const { jobId: preselectedJobId } = useLocalSearchParams<{ jobId?: string }>();
   const { colors, spacing, radius, typographyRamp } = useTheme();
-  const frame = useSafeAreaFrame();
-  const insets = useSafeAreaInsets();
 
   // ---- data ----------------------------------------------------------------
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -79,6 +83,7 @@ export default function ManualTimeEntryScreen() {
   // ---- validation errors ---------------------------------------------------
   const [jobError, setJobError] = useState<string | undefined>(undefined);
   const [hoursError, setHoursError] = useState<string | undefined>(undefined);
+  const [dateError, setDateError] = useState<string | undefined>(undefined);
 
   // ---- picker sheet --------------------------------------------------------
   const [jobPickerOpen, setJobPickerOpen] = useState(false);
@@ -87,6 +92,12 @@ export default function ManualTimeEntryScreen() {
   const selectedJob = jobs.find((j) => j.id === selectedJobId);
   const isDirty =
     !!selectedJobId || hours.trim().length > 0 || note.trim().length > 0;
+
+  // Derive a Date for DateField from the YYYY-MM-DD string state. Anchor at local
+  // midnight so the displayed day matches the stored string regardless of timezone.
+  const dateValue = /^\d{4}-\d{2}-\d{2}$/.test(date)
+    ? new Date(`${date}T00:00:00`)
+    : null;
 
   // ---- data load -----------------------------------------------------------
   const load = useCallback(async () => {
@@ -132,24 +143,26 @@ export default function ManualTimeEntryScreen() {
 
   // ---- save handler — API call UNCHANGED -----------------------------------
   const handleSave = async () => {
-    if (!selectedJobId) {
+    const nextJobError = selectedJobId ? undefined : validateRequired('', 'Job');
+    const nextHoursError = validateHours(hours);
+    const nextDateError = validateRequired(date, 'Date') ?? validateDate(date);
+
+    setJobError(nextJobError);
+    setHoursError(nextHoursError);
+    setDateError(nextDateError);
+
+    if (nextJobError || nextHoursError || nextDateError) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      setJobError('Select a job');
       return;
     }
-    const h = parseFloat(hours);
-    if (!hours.trim() || isNaN(h) || h <= 0) {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      setHoursError('Enter valid hours');
-      return;
-    }
+
     setSaving(true);
     try {
       await api.addManualTimeEntry({
         employeeId: selectedEmployeeId ?? undefined,
-        jobId: selectedJobId,
+        jobId: selectedJobId!,
         date,
-        hours: h,
+        hours: parseFloat(hours),
         note: note.trim() || undefined,
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -179,14 +192,8 @@ export default function ManualTimeEntryScreen() {
   const activeEmployees = employees.filter((e) => e.active);
 
   return (
-    <Screen headerMode="native" padded={false} keyboardAvoiding>
-      <View style={{ height: frame.height - insets.top }}>
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: spacing.md, gap: spacing.md, paddingBottom: 32 }}
-        contentInsetAdjustmentBehavior="automatic"
-        keyboardShouldPersistTaps="handled"
-      >
+    <Screen headerMode="native" scroll keyboardAvoiding>
+      <View style={{ gap: spacing.md, paddingVertical: spacing.md }}>
         {/* ---- Employee (optional) — chip row (short list, view-scope switcher) ---- */}
         <View style={{ gap: 4 }}>
           <Text variant="footnote" tone="muted">
@@ -253,13 +260,17 @@ export default function ManualTimeEntryScreen() {
           />
         </View>
 
-        {/* ---- Date ---- */}
-        <Input
+        {/* ---- Date (required) — DateField (no free text) ---- */}
+        <DateField
           label="Date"
-          value={date}
-          onChangeText={setDate}
-          placeholder="YYYY-MM-DD"
-          leftIcon="calendar"
+          value={dateValue}
+          onChange={(d) => {
+            setDate(formatDateInputValue(d));
+            if (dateError) setDateError(undefined);
+          }}
+          error={dateError}
+          maximumDate={new Date()}
+          testID="manualtime-date-picker"
         />
 
         {/* ---- Hours (required) ---- */}
@@ -300,10 +311,8 @@ export default function ManualTimeEntryScreen() {
             multiline
           />
         </View>
-      </ScrollView>
 
-      {/* ---- Save button pinned to bottom of the modal (outside ScrollView) ---- */}
-      <View style={{ padding: spacing.md }}>
+        {/* ---- Save button — scrolls above the keyboard with the form ---- */}
         <Button
           variant="primary"
           size="lg"
@@ -313,7 +322,6 @@ export default function ManualTimeEntryScreen() {
           loading={saving}
           testID="manualtime-save-button"
         />
-      </View>
       </View>
 
       {/* ---- Job picker sheet — sibling, NEVER inside ScrollView ---- */}
