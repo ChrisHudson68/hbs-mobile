@@ -2,10 +2,10 @@ import { useNavigation, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Animated, Pressable, RefreshControl,
+  Pressable, RefreshControl,
   ScrollView, StyleSheet, Text as RNText, View,
 } from 'react-native';
-import { Extrapolation, interpolate } from 'react-native-reanimated';
+import Animated, { Extrapolation, interpolate, useAnimatedStyle } from 'react-native-reanimated';
 import type { SharedValue } from 'react-native-reanimated';
 import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { useApi } from '../../../src/mobile/hooks/useApi';
@@ -78,20 +78,30 @@ function InvoiceSwipeActions({
   const { colors } = useTheme();
   const panelWidth = canManage ? PANEL_TWO : PANEL_ONE;
 
-  // Translate the action panel in sync with the swipe drag.
+  // Translate the action panel in sync with the swipe drag, on the UI thread.
   // Drag is negative for left-swipe (right-actions revealed) — Pitfall 3.
-  const translateX = interpolate(
-    drag.get(),
-    [-panelWidth, 0],
-    [0, panelWidth],
-    Extrapolation.CLAMP,
-  );
+  // Must run inside a useAnimatedStyle worklet: `drag` is a SharedValue that
+  // mutates on the UI thread without re-rendering React, so interpolating it in
+  // the render body freezes the panel at mount. Mirrors timesheets TimeRowSwipeActions.
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateX: interpolate(
+          drag.get(),
+          [-panelWidth, 0],
+          [0, panelWidth],
+          Extrapolation.CLAMP,
+        ),
+      },
+    ],
+  }));
 
   return (
     <Animated.View
       style={[
         s.swipePanel,
-        { width: panelWidth, transform: [{ translateX }] },
+        { width: panelWidth },
+        animStyle,
       ]}
     >
       {canManage && (
