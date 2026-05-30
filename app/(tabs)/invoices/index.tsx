@@ -1,9 +1,13 @@
 import { useNavigation, useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Pressable, RefreshControl,
+  Animated, Pressable, RefreshControl,
   ScrollView, StyleSheet, Text as RNText, View,
 } from 'react-native';
+import { Extrapolation, interpolate } from 'react-native-reanimated';
+import type { SharedValue } from 'react-native-reanimated';
+import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { useApi } from '../../../src/mobile/hooks/useApi';
 import { useTheme } from '../../../src/mobile/theme';
 import type { Invoice } from '../../../src/mobile/types';
@@ -14,6 +18,9 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Text } from '@/components/ui/Text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { SkeletonRow } from '@/components/ui/SkeletonRow';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { SwipeRow, closeOpenSwipeRow } from '@/components/ui/SwipeRow';
 
 type InvoiceFilter = 'unpaid' | 'partial' | 'paid' | 'all';
 
@@ -45,6 +52,69 @@ const FILTER_TEST_IDS: Record<InvoiceFilter, string> = {
   paid: 'invoices-filter-paid',
   all: 'invoices-filter-all',
 };
+
+// Swipe panel widths (72pt per button; matches 06-UI-SPEC swipe-action button width)
+const ACTION_BTN_WIDTH = 72;
+const PANEL_TWO = ACTION_BTN_WIDTH * 2; // manager: 2 buttons
+const PANEL_ONE = ACTION_BTN_WIDTH;     // non-manager: 1 button
+
+type InvoiceSwipeActionsProps = {
+  inv: Invoice;
+  drag: SharedValue<number>;
+  methods: SwipeableMethods;
+  canManage: boolean;
+  onRecordPayment: () => void;
+  onSharePdf: () => void;
+};
+
+function InvoiceSwipeActions({
+  inv,
+  drag,
+  methods,
+  canManage,
+  onRecordPayment,
+  onSharePdf,
+}: InvoiceSwipeActionsProps) {
+  const { colors } = useTheme();
+  const panelWidth = canManage ? PANEL_TWO : PANEL_ONE;
+
+  // Translate the action panel in sync with the swipe drag.
+  // Drag is negative for left-swipe (right-actions revealed) — Pitfall 3.
+  const translateX = interpolate(
+    drag.get(),
+    [-panelWidth, 0],
+    [0, panelWidth],
+    Extrapolation.CLAMP,
+  );
+
+  return (
+    <Animated.View
+      style={[
+        s.swipePanel,
+        { width: panelWidth, transform: [{ translateX }] },
+      ]}
+    >
+      {canManage && (
+        <Pressable
+          testID={`invoice-record-payment-${inv.id}`}
+          accessibilityLabel="Record payment"
+          onPress={() => { methods.close(); onRecordPayment(); }}
+          style={[s.swipeBtn, { backgroundColor: colors.success, width: ACTION_BTN_WIDTH }]}
+        >
+          <IconSymbol name={'checkmark.circle' as never} size={22} color={colors.inverse} />
+        </Pressable>
+      )}
+      <Pressable
+        testID={`invoice-share-pdf-${inv.id}`}
+        accessibilityLabel="Share PDF"
+        onPress={() => { methods.close(); onSharePdf(); }}
+        style={[s.swipeBtn, { backgroundColor: colors.navy, width: ACTION_BTN_WIDTH }]}
+      >
+        <IconSymbol name={'square.and.arrow.up' as never} size={22} color={colors.inverse} />
+      </Pressable>
+    </Animated.View>
+  );
+}
 
 export default function InvoicesScreen() {
   const api = useApi();
@@ -87,11 +157,15 @@ export default function InvoicesScreen() {
 
   useEffect(() => { void load(); }, [load]);
 
+  // Skeleton loading guard — 4 SkeletonRows replace the old ActivityIndicator
   if (loading) {
     return (
-      <Screen headerMode="native">
-        <View style={s.center}>
-          <ActivityIndicator size="large" color={colors.navy} />
+      <Screen headerMode="native" testID="invoices-skeleton">
+        <View style={{ padding: spacing.md, gap: 10 }}>
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
         </View>
       </Screen>
     );
@@ -125,7 +199,16 @@ export default function InvoicesScreen() {
       <ScrollView
         contentContainerStyle={{ padding: spacing.md, paddingTop: 0, gap: 10 }}
         contentInsetAdjustmentBehavior="automatic"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
+        onScrollBeginDrag={closeOpenSwipeRow}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              void load(true);
+            }}
+          />
+        }
       >
         {/* Open-balance banner — manager only (T-05-05-01) */}
         {canManage && unpaidTotal > 0 && (
@@ -195,38 +278,41 @@ export default function InvoicesScreen() {
           })}
         </ScrollView>
 
-        {/* Empty state (Pattern I) */}
+        {/* Empty state — EmptyState kit component replaces inline block (MOTION-02) */}
         {filtered.length === 0 && (
-          <View style={{ alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm }}>
-            <IconSymbol name="doc.text" size={48} color={colors.mutedLight} />
-            <RNText style={{
-              fontSize: 15,
-              fontWeight: '400',
-              lineHeight: 21,
-              color: colors.muted,
-              textAlign: 'center',
-            }}>
-              {filter === 'all'
-                ? 'No invoices found.'
-                : `No ${FILTER_LABELS[filter].toLowerCase()} invoices found.`}
-            </RNText>
-          </View>
+          <EmptyState
+            icon="doc.text"
+            message="No invoices here."
+            actionLabel={canManage ? 'Create Invoice' : undefined}
+            onAction={canManage ? () => router.push('/invoices/new') : undefined}
+            testID="invoices-empty-state"
+          />
         )}
 
-        {/* Invoice cards */}
-        {filtered.map((inv, idx) => {
+        {/* Invoice cards — SwipeRow with role-gated actions + Card onPress (MOTION-03) */}
+        {filtered.map((inv) => {
           const overdue = inv.status?.toLowerCase() !== 'paid' && new Date(inv.dueDate) < new Date();
           const hasBalance = Number(inv.balance) > 0 && inv.status?.toLowerCase() !== 'paid';
           return (
-            <Pressable
+            <SwipeRow
               key={inv.id}
-              onPress={() => router.push(`/invoices/${inv.id}`)}
+              testID={`invoice-row-${inv.id}`}
+              renderActions={(drag, methods) => (
+                <InvoiceSwipeActions
+                  inv={inv}
+                  drag={drag}
+                  methods={methods}
+                  canManage={canManage}
+                  onRecordPayment={() => router.push(`/invoices/${inv.id}?action=recordPayment`)}
+                  onSharePdf={() => router.push(`/invoices/${inv.id}?action=share`)}
+                />
+              )}
             >
               <Card
                 elevation="sm"
                 padding="md"
                 radius="lg"
-                testID={idx === 0 ? 'invoices-card-0' : undefined}
+                onPress={() => router.push(`/invoices/${inv.id}`)}
               >
                 {/* Overdue left accent */}
                 {overdue && (
@@ -282,7 +368,7 @@ export default function InvoicesScreen() {
                   </RNText>
                 )}
               </Card>
-            </Pressable>
+            </SwipeRow>
           );
         })}
 
@@ -294,7 +380,15 @@ export default function InvoicesScreen() {
 }
 
 const s = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   chip: {},
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  swipePanel: {
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
+  swipeBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+  },
 });
