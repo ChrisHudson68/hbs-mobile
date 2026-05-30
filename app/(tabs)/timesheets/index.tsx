@@ -15,7 +15,7 @@ import { useAppState } from '../../../src/mobile/context/AppStateContext';
 import { enqueueClockIn, enqueueClockOut, isOnline, useOfflineQueueFlusher } from '../../../src/mobile/hooks/useOfflineQueue';
 import { useTheme } from '../../../src/mobile/theme';
 import type { ClockInJobsResponse, Employee, JobListItem, TimesheetEditRequest, TimesheetsResponse, TimesheetEntry } from '../../../src/mobile/types';
-import { formatDate, formatDuration, formatHours, hasPermission, isManagerOrAdmin } from '../../../src/mobile/utils';
+import { formatDate, formatDuration, formatHours, hasPermission, isManagerOrAdmin, validateHours, validateRequired } from '../../../src/mobile/utils';
 import { Screen } from '@/components/ui/Screen';
 import { Card } from '@/components/ui/Card';
 import { Text } from '@/components/ui/Text';
@@ -413,11 +413,10 @@ export default function TimesheetsScreen() {
 
   const confirmAdminEdit = async () => {
     if (!editEntry) return;
+    const hoursError = validateHours(editHours);
+    setEditHoursError(hoursError);
+    if (hoursError) return;
     const hours = parseFloat(editHours);
-    if (isNaN(hours) || hours <= 0 || hours > 24) {
-      setEditHoursError('Enter valid hours (0–24)');
-      return;
-    }
     setEditSaving(true);
     try {
       await api.editTimeEntry(editEntry.id, {
@@ -474,15 +473,12 @@ export default function TimesheetsScreen() {
 
   const confirmRequestEdit = async () => {
     if (!requestEditEntry) return;
+    const hoursError = validateHours(reqHours);
+    const reasonError = validateRequired(reqReason, 'Reason');
+    setReqHoursError(hoursError);
+    setReqReasonError(reasonError);
+    if (hoursError || reasonError) return;
     const hours = parseFloat(reqHours);
-    if (isNaN(hours) || hours <= 0 || hours > 24) {
-      setReqHoursError('Enter valid hours (0–24)');
-      return;
-    }
-    if (!reqReason.trim()) {
-      setReqReasonError('Explain why this edit is needed');
-      return;
-    }
     setReqSaving(true);
     try {
       await api.requestTimesheetEdit(requestEditEntry.id, {
@@ -921,7 +917,8 @@ export default function TimesheetsScreen() {
       {clockOutSheetOpen && (
         <Sheet
           testID="timesheets-clockout-sheet"
-          fitContent
+          snapPoints={['40%', '70%']}
+          scrollable
           onClose={() => setClockOutSheetOpen(false)}
           header={
             <SheetHeader
@@ -936,6 +933,7 @@ export default function TimesheetsScreen() {
           <Text variant="subhead" tone="muted">Add an optional note for this shift</Text>
           <View style={{ marginTop: spacing.sm, marginBottom: spacing.md }}>
             <Input
+              bottomSheet
               placeholder="e.g. Finished framing, started drywall"
               value={clockOutNote}
               onChangeText={setClockOutNote}
@@ -978,7 +976,8 @@ export default function TimesheetsScreen() {
       {/* Admin edit-time sheet */}
       {!!editEntry && (
         <Sheet
-          snapPoints={['60%']}
+          snapPoints={['70%', '92%']}
+          scrollable
           onClose={() => setEditEntry(null)}
           header={
             <SheetHeader
@@ -994,6 +993,7 @@ export default function TimesheetsScreen() {
               {editEntry.employeeName} · {formatDate(editEntry.date)}
             </Text>
             <Input
+              bottomSheet
               label="Hours"
               placeholder="e.g. 8"
               value={editHours}
@@ -1002,6 +1002,7 @@ export default function TimesheetsScreen() {
               error={editHoursError}
             />
             <Input
+              bottomSheet
               label="Note (optional)"
               placeholder="Add a note..."
               value={editNote}
@@ -1056,7 +1057,8 @@ export default function TimesheetsScreen() {
       {/* Employee request-edit sheet */}
       {!!requestEditEntry && (
         <Sheet
-          snapPoints={['60%']}
+          snapPoints={['70%', '92%']}
+          scrollable
           onClose={() => setRequestEditEntry(null)}
           header={
             <SheetHeader
@@ -1071,6 +1073,7 @@ export default function TimesheetsScreen() {
           <View style={{ gap: spacing.md, paddingBottom: spacing.lg }}>
             <Text variant="footnote" tone="muted">{formatDate(requestEditEntry.date)}</Text>
             <Input
+              bottomSheet
               label="Proposed Hours"
               placeholder="e.g. 8"
               value={reqHours}
@@ -1079,12 +1082,14 @@ export default function TimesheetsScreen() {
               error={reqHoursError}
             />
             <Input
+              bottomSheet
               label="Note (optional)"
               placeholder="Update the note..."
               value={reqNote}
               onChangeText={setReqNote}
             />
             <Input
+              bottomSheet
               label="Reason for edit *"
               placeholder="e.g. Forgot to clock out, worked until 5 PM"
               value={reqReason}
