@@ -97,8 +97,9 @@ export default function InvoiceDetailScreen() {
   // the invoice has loaded. Keeps handleSharePdf / handleRecordPayment bodies
   // byte-for-byte unchanged (protected regions — 06-07 range-hash gate).
   const actionFiredRef = useRef(false);
-  const handleSharePdfRef = useRef(handleSharePdf);
-  handleSharePdfRef.current = handleSharePdf;
+  // Ref is populated after handleSharePdf is declared below; the effect only
+  // runs after invoice loads so the ref is always populated before it fires.
+  const handleSharePdfRef = useRef<() => Promise<void>>(async () => { /* populated below */ });
   const canManageRef = useRef(canManage);
   canManageRef.current = canManage;
   useEffect(() => {
@@ -141,6 +142,8 @@ export default function InvoiceDetailScreen() {
       setPdfLoading(false);
     }
   };
+  // Keep ref current so the action-param dispatcher can call the latest closure.
+  handleSharePdfRef.current = handleSharePdf;
 
   const handleRecordPayment = async () => {
     const amt = parseFloat(payAmount);
