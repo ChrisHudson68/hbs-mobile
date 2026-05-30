@@ -263,7 +263,7 @@ export default function DashboardScreen() {
                 <SectionHeader title="Financials" />
                 <View style={s.statsGrid}>
                   {/* Active Jobs */}
-                  <View style={{ flex: 1, minWidth: '45%' }}>
+                  <View style={s.statCell}>
                     <Card elevation="sm" padding="sm">
                       <View
                         style={{
@@ -285,7 +285,7 @@ export default function DashboardScreen() {
                     </Card>
                   </View>
                   {/* Total Profit */}
-                  <View style={{ flex: 1, minWidth: '45%' }}>
+                  <View style={s.statCell}>
                     <Card elevation="sm" padding="sm">
                       <View
                         style={{
@@ -307,7 +307,7 @@ export default function DashboardScreen() {
                     </Card>
                   </View>
                   {/* Collected */}
-                  <View style={{ flex: 1, minWidth: '45%' }}>
+                  <View style={s.statCell}>
                     <Card elevation="sm" padding="sm">
                       <View
                         style={{
@@ -329,7 +329,7 @@ export default function DashboardScreen() {
                     </Card>
                   </View>
                   {/* Unpaid */}
-                  <View style={{ flex: 1, minWidth: '45%' }}>
+                  <View style={s.statCell}>
                     <Card elevation="sm" padding="sm">
                       <View
                         style={{
@@ -480,6 +480,10 @@ const s = StyleSheet.create({
   fill: { flex: 1 },
   section: { gap: 8 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  // Two-per-row wrap grid: flexBasis ~47% + grow:1 fills each row evenly with
+  // the 10pt gap accounted for; minWidth:0 lets long currency values shrink
+  // instead of forcing an overflow. Preserves the prior 2×2 layout.
+  statCell: { flexGrow: 1, flexBasis: '47%', minWidth: 0 },
   weekRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 10 },
   invRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 });

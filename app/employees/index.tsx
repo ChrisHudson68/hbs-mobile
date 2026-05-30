@@ -139,8 +139,8 @@ export default function EmployeesScreen() {
                 </View>
                 {/* Name + pay */}
                 <View style={{ flex: 1, gap: 2 }}>
-                  <Text variant="headline" weight="600">{emp.name}</Text>
-                  <Text variant="footnote" tone="muted">{payLabel(emp)}</Text>
+                  <Text variant="headline" weight="600" numberOfLines={1}>{emp.name}</Text>
+                  <Text variant="footnote" tone="muted" numberOfLines={1}>{payLabel(emp)}</Text>
                 </View>
                 {/* Active badge */}
                 <Badge tone="success" label="Active" size="sm" />
@@ -183,8 +183,8 @@ export default function EmployeesScreen() {
                 </View>
                 {/* Name + pay */}
                 <View style={{ flex: 1, gap: 2 }}>
-                  <Text variant="headline" weight="600">{emp.name}</Text>
-                  <Text variant="footnote" tone="muted">{payLabel(emp)}</Text>
+                  <Text variant="headline" weight="600" numberOfLines={1}>{emp.name}</Text>
+                  <Text variant="footnote" tone="muted" numberOfLines={1}>{payLabel(emp)}</Text>
                 </View>
               </Pressable>
             ))}

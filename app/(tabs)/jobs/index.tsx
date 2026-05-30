@@ -228,12 +228,12 @@ export default function JobsScreen() {
               >
                 {/* Top row: name + status badge */}
                 <View style={s.cardTop}>
-                  <View style={{ flex: 1 }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
                     <Text variant="headline" weight="600" numberOfLines={2}>
                       {job.jobName ?? 'Untitled Job'}
                     </Text>
                     {job.clientName ? (
-                      <Text variant="subhead" tone="muted">
+                      <Text variant="subhead" tone="muted" numberOfLines={1}>
                         {job.clientName}
                       </Text>
                     ) : null}

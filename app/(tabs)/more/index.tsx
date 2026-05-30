@@ -151,9 +151,9 @@ export default function MoreScreen() {
                 tone={roleEntry.badgeTone}
                 label={user?.role?.toUpperCase() ?? 'USER'}
               />
-              <Text variant="footnote" tone="muted">{user?.email}</Text>
+              <Text variant="footnote" tone="muted" numberOfLines={1}>{user?.email}</Text>
               {tenantSubdomain ? (
-                <Text variant="caption" tone="muted">
+                <Text variant="caption" tone="muted" numberOfLines={1}>
                   {tenantSubdomain}.hudson-business-solutions.com
                 </Text>
               ) : null}

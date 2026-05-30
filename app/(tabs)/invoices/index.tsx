@@ -340,7 +340,7 @@ export default function InvoicesScreen() {
 
                 {/* Top row: invoice number + amount/badge */}
                 <View style={s.cardTop}>
-                  <View style={{ flex: 1 }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
                     <Text variant="headline" weight="600" numberOfLines={1}>
                       {inv.invoiceNumber ?? `Invoice #${inv.id}`}
                     </Text>
@@ -360,8 +360,11 @@ export default function InvoicesScreen() {
                     </RNText>
                   </View>
 
-                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                    <RNText style={{ fontSize: 20, fontWeight: '700', lineHeight: 26, color: colors.text }}>
+                  <View style={{ alignItems: 'flex-end', gap: 4, flexShrink: 0, maxWidth: '55%' }}>
+                    <RNText
+                      numberOfLines={1}
+                      style={{ fontSize: 20, fontWeight: '700', lineHeight: 26, color: colors.text }}
+                    >
                       {formatCurrency(inv.amount)}
                     </RNText>
                     <Badge
