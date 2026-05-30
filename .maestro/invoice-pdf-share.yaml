@@ -17,14 +17,14 @@ appId: com.hbs.mobile
 # --- Wait for Invoices list to load ---
 - extendedWaitUntil:
     visible:
-      id: "invoices-card-0"
+      id: "invoice-row-.*"
     timeout: 15000
 - assertVisible:
-    id: "invoices-card-0"
+    id: "invoice-row-.*"
 
 # --- Open the first invoice (card-0) ---
 - tapOn:
-    id: "invoices-card-0"
+    id: "invoice-row-.*"
 - waitForAnimationToEnd
 
 # --- Wait for Invoice detail to load (PDF share button is in the hero card) ---
