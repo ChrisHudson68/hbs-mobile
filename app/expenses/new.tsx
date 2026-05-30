@@ -4,13 +4,19 @@ import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator, Alert, Image, Pressable,
-  ScrollView, StyleSheet, Text as RNText, View,
+  StyleSheet, Text as RNText, View,
 } from 'react-native';
-import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApi } from '../../src/mobile/hooks/useApi';
 import { useTheme } from '../../src/mobile/theme';
 import type { JobListItem } from '../../src/mobile/types';
+import {
+  formatDateInputValue,
+  validateAmount,
+  validateDate,
+  validateRequired,
+} from '../../src/mobile/utils';
 import { Button } from '@/components/ui/Button';
+import { DateField } from '@/components/ui/DateField';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Input } from '@/components/ui/Input';
 import { ListRow } from '@/components/ui/ListRow';
@@ -26,8 +32,6 @@ export default function NewExpenseScreen() {
   const api = useApi();
   const { jobId: preselectedJobId } = useLocalSearchParams<{ jobId?: string }>();
   const { colors, spacing, radius } = useTheme();
-  const frame = useSafeAreaFrame();
-  const insets = useSafeAreaInsets();
 
   const [jobs, setJobs] = useState<JobListItem[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
@@ -38,6 +42,9 @@ export default function NewExpenseScreen() {
   const [category, setCategory] = useState('Materials');
   const [vendor, setVendor] = useState('');
   const [amount, setAmount] = useState('');
+  // Stored as a YYYY-MM-DD string so the protected uploadAsset path (which sets it
+  // from the parsed receiptDate string) and the API call stay unchanged. DateField
+  // consumes a derived Date and writes back the serialised string.
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
   const [receiptFilename, setReceiptFilename] = useState<string | null>(null);
@@ -51,7 +58,9 @@ export default function NewExpenseScreen() {
 
   // Inline error state (D-12)
   const [jobError, setJobError] = useState<string | undefined>(undefined);
+  const [vendorError, setVendorError] = useState<string | undefined>(undefined);
   const [amountError, setAmountError] = useState<string | undefined>(undefined);
+  const [dateError, setDateError] = useState<string | undefined>(undefined);
   const [receiptError, setReceiptError] = useState<string | undefined>(undefined);
 
   const load = useCallback(async () => {
@@ -146,11 +155,19 @@ export default function NewExpenseScreen() {
   };
 
   const handleSave = async () => {
-    let hasError = false;
-    if (!selectedJobId) { setJobError('Select a job'); hasError = true; }
-    if (!amount.trim()) { setAmountError('Enter an amount'); hasError = true; }
-    if (!receiptFilename) { setReceiptError('Upload a receipt photo'); hasError = true; }
-    if (hasError) {
+    const nextJobError = selectedJobId ? undefined : validateRequired('', 'Job');
+    const nextVendorError = validateRequired(vendor, 'Vendor');
+    const nextAmountError = validateAmount(amount);
+    const nextDateError = validateRequired(date, 'Date') ?? validateDate(date);
+    const nextReceiptError = receiptFilename ? undefined : 'Upload a receipt photo';
+
+    setJobError(nextJobError);
+    setVendorError(nextVendorError);
+    setAmountError(nextAmountError);
+    setDateError(nextDateError);
+    setReceiptError(nextReceiptError);
+
+    if (nextJobError || nextVendorError || nextAmountError || nextDateError || nextReceiptError) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
@@ -176,6 +193,10 @@ export default function NewExpenseScreen() {
 
   const selectedJob = jobs.find(j => j.id === selectedJobId);
 
+  // Derive a Date for DateField from the YYYY-MM-DD string state. Anchor at local
+  // midnight so the displayed day matches the stored string regardless of timezone.
+  const dateValue = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00`) : null;
+
   if (loadingJobs) {
     return (
       <Screen headerMode="native">
@@ -187,14 +208,8 @@ export default function NewExpenseScreen() {
   }
 
   return (
-    <Screen headerMode="native" padded={false} keyboardAvoiding>
-      <View style={{ height: frame.height - insets.top }}>
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: spacing.md, gap: spacing.md, paddingBottom: 32 }}
-        contentInsetAdjustmentBehavior="automatic"
-        keyboardShouldPersistTaps="handled"
-      >
+    <Screen headerMode="native" scroll keyboardAvoiding>
+      <View style={{ gap: spacing.md, paddingVertical: spacing.md }}>
 
         {/* Job picker trigger */}
         <View style={{ gap: spacing.xs }}>
@@ -263,10 +278,12 @@ export default function NewExpenseScreen() {
 
         {/* Vendor input */}
         <Input
-          label="Vendor / Store"
+          label="Vendor / Store *"
           value={vendor}
-          onChangeText={setVendor}
+          onChangeText={(v) => { setVendor(v); if (vendorError) setVendorError(undefined); }}
           placeholder="e.g. Home Depot"
+          error={vendorError}
+          testID="newexpense-vendor-input"
         />
 
         {/* Amount input */}
@@ -277,20 +294,23 @@ export default function NewExpenseScreen() {
           placeholder="0.00"
           keyboardType="decimal-pad"
           error={amountError}
+          testID="newexpense-amount-input"
         />
 
-        {/* Date input */}
-        <Input
-          label="Date"
-          value={date}
-          onChangeText={setDate}
-          placeholder="YYYY-MM-DD"
+        {/* Date — DateField (no free text) */}
+        <DateField
+          label="Date *"
+          value={dateValue}
+          onChange={(d) => {
+            setDate(formatDateInputValue(d));
+            if (dateError) setDateError(undefined);
+          }}
+          error={dateError}
+          maximumDate={new Date()}
+          testID="newexpense-date-picker"
         />
 
-      </ScrollView>
-
-      {/* Save button pinned outside ScrollView */}
-      <View style={{ padding: spacing.md }}>
+        {/* Primary CTA — scrolls above the keyboard with the form */}
         <Button
           variant="primary"
           size="lg"
@@ -300,7 +320,6 @@ export default function NewExpenseScreen() {
           onPress={() => void handleSave()}
           testID="newexpense-save-button"
         />
-      </View>
       </View>
 
       {/* ── Sheets — siblings at root level, NEVER inside ScrollView ── */}
