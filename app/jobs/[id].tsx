@@ -2,9 +2,13 @@ import SegmentedControl from '@react-native-segmented-control/segmented-control'
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Pressable, RefreshControl,
+  Alert, LayoutAnimation, Pressable, RefreshControl,
   ScrollView, StyleSheet, Text as RNText, View,
 } from 'react-native';
+import Animated, { Extrapolation, interpolate, useAnimatedStyle } from 'react-native-reanimated';
+import type { SharedValue } from 'react-native-reanimated';
+import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
+import * as Haptics from 'expo-haptics';
 import { useApi } from '../../src/mobile/hooks/useApi';
 import { useAuth } from '../../src/mobile/context/AuthContext';
 import { useTheme } from '../../src/mobile/theme';
@@ -19,6 +23,10 @@ import { Input } from '@/components/ui/Input';
 import { ListRow } from '@/components/ui/ListRow';
 import { Sheet } from '@/components/ui/Sheet';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { SwipeRow, closeOpenSwipeRow } from '@/components/ui/SwipeRow';
+import { SkeletonBlock } from '@/components/ui/SkeletonBlock';
+import { SkeletonRow } from '@/components/ui/SkeletonRow';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 type Tab = 'overview' | 'income' | 'expenses' | 'time';
 
@@ -61,6 +69,77 @@ function SheetHeader({
       <Text variant="headline" weight="600">{title}</Text>
       <Button variant="primary" size="sm" label={saveLabel} onPress={onSave} loading={loading} />
     </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RowSwipeActions — shared swipe panel for job-detail expense + time rows.
+// Delete (danger/trash) first, then Edit (navy/pencil) — matches the locked
+// 06-UI-SPEC action contract (Delete shown first on left-swipe). Panel = 144pt
+// (2 × 72pt). Uses sv.get() via useAnimatedStyle — React Compiler-compliant
+// (D-12). Icon-only buttons carry accessibilityLabels.
+// ---------------------------------------------------------------------------
+
+const SWIPE_BUTTON_WIDTH = 72;
+const SWIPE_PANEL_WIDTH = SWIPE_BUTTON_WIDTH * 2;
+
+type RowSwipeActionsProps = {
+  drag: SharedValue<number>;
+  methods: SwipeableMethods;
+  onDelete: () => void;
+  onEdit: () => void;
+  testIDDelete: string;
+  testIDEdit: string;
+  deleteLabel: string;
+  editLabel: string;
+};
+
+function RowSwipeActions({
+  drag,
+  methods,
+  onDelete,
+  onEdit,
+  testIDDelete,
+  testIDEdit,
+  deleteLabel,
+  editLabel,
+}: RowSwipeActionsProps) {
+  const { colors, radius } = useTheme();
+
+  // Translate the panel so it anchors to the right edge during the swipe
+  // (Pitfall 3: drag is negative for left-swipe / right-actions revealed).
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateX: interpolate(
+          drag.get(),
+          [-SWIPE_PANEL_WIDTH, 0],
+          [0, SWIPE_PANEL_WIDTH],
+          Extrapolation.CLAMP,
+        ),
+      },
+    ],
+  }));
+
+  return (
+    <Animated.View style={[{ width: SWIPE_PANEL_WIDTH, flexDirection: 'row' }, animStyle]}>
+      <Pressable
+        style={[s.swipeBtn, { backgroundColor: colors.danger, borderRadius: radius.sm }]}
+        onPress={() => { methods.close(); onDelete(); }}
+        accessibilityLabel={deleteLabel}
+        testID={testIDDelete}
+      >
+        <IconSymbol name={'trash' as never} size={20} color={colors.inverse} />
+      </Pressable>
+      <Pressable
+        style={[s.swipeBtn, { backgroundColor: colors.navy, borderRadius: radius.sm }]}
+        onPress={() => { methods.close(); onEdit(); }}
+        accessibilityLabel={editLabel}
+        testID={testIDEdit}
+      >
+        <IconSymbol name={'pencil' as never} size={20} color={colors.inverse} />
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -180,9 +259,13 @@ export default function JobDetailScreen() {
         amount,
         date: expDate.trim(),
       });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setEditExpenseEntry(null);
       await load();
-    } catch (e) { Alert.alert('Error', e instanceof Error ? e.message : 'Failed'); }
+    } catch (e) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+    }
     finally { setExpSaving(false); }
   };
 
@@ -190,7 +273,12 @@ export default function JobDetailScreen() {
     Alert.alert('Delete Expense', 'Remove this expense?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
-        try { await api.deleteExpense(expenseId); await load(); }
+        try {
+          await api.deleteExpense(expenseId);
+          // Slide the deleted row out before the list re-renders (D-10).
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          await load();
+        }
         catch (e) { Alert.alert('Error', e instanceof Error ? e.message : 'Failed'); }
       }},
     ]);
@@ -200,7 +288,12 @@ export default function JobDetailScreen() {
     Alert.alert('Delete Time Entry', 'Remove this time entry?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
-        try { await api.deleteTimeEntry(entryId); await load(); }
+        try {
+          await api.deleteTimeEntry(entryId);
+          // Slide the deleted row out before the list re-renders (D-10).
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          await load();
+        }
         catch (e) { Alert.alert('Error', e instanceof Error ? e.message : 'Failed'); }
       }},
     ]);
@@ -227,9 +320,13 @@ export default function JobDetailScreen() {
         hours,
         note: timeEditNote.trim() || null,
       });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setEditTimeEntry(null);
       await load();
-    } catch (e) { Alert.alert('Error', e instanceof Error ? e.message : 'Failed'); }
+    } catch (e) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+    }
     finally { setTimeEditSaving(false); }
   };
 
@@ -245,8 +342,12 @@ export default function JobDetailScreen() {
 
   if (loading) {
     return (
-      <Screen headerMode="native">
-        <View style={s.center}><ActivityIndicator size="large" color={colors.navy} /></View>
+      <Screen headerMode="native" testID="jobdetail-skeleton">
+        <View style={{ padding: spacing.md, gap: 10 }}>
+          {/* Tab-bar rect — mimics the section SegmentedControl */}
+          <SkeletonBlock width="100%" height={40} borderRadius={radius.md} />
+          {[0, 1, 2, 3].map(i => <SkeletonRow key={i} />)}
+        </View>
       </Screen>
     );
   }
@@ -322,6 +423,7 @@ export default function JobDetailScreen() {
       <ScrollView
         contentContainerStyle={{ padding: spacing.md, gap: spacing.md, paddingBottom: 32 }}
         contentInsetAdjustmentBehavior="automatic"
+        onScrollBeginDrag={closeOpenSwipeRow}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
       >
         {/* Overview tab */}
@@ -460,10 +562,13 @@ export default function JobDetailScreen() {
               />
             )}
             {expenseList.length === 0 ? (
-              <View style={s.emptyState}>
-                <IconSymbol name={'receipt' as never} size={40} color={colors.mutedLight} />
-                <RNText style={{ textAlign: 'center', color: colors.muted, fontSize: 15 }}>No expenses recorded yet.</RNText>
-              </View>
+              <EmptyState
+                icon="creditcard"
+                message="No expenses."
+                actionLabel={canManage ? 'Add Expense' : undefined}
+                onAction={canManage ? () => router.push({ pathname: '/expenses/new', params: { jobId: id } }) : undefined}
+                testID="jobdetail-expense-empty"
+              />
             ) : (
               <>
                 <Card elevation="sm" padding="sm" radius="md">
@@ -473,26 +578,29 @@ export default function JobDetailScreen() {
                   </View>
                 </Card>
                 {expenseList.map(e => (
-                  <ListRow
+                  <SwipeRow
                     key={e.id}
-                    title={formatCurrency(e.amount)}
-                    subtitle={`${e.category}${e.vendor ? ' · ' + e.vendor : ''} · ${formatDate(e.date)}`}
-                    trailing={canManage ? 'custom' : 'none'}
-                    trailingCustom={
-                      canManage
-                        ? (
-                          <View style={{ flexDirection: 'row', gap: 6 }}>
-                            <Pressable onPress={() => openEditExpense(e)} style={[s.editRowBtn, { borderColor: colors.border, backgroundColor: colors.bg }]}>
-                              <RNText style={{ fontSize: 11, fontWeight: '700', color: colors.muted }}>Edit</RNText>
-                            </Pressable>
-                            <Pressable onPress={() => handleDeleteExpense(e.id)} style={{ padding: 8 }}>
-                              <RNText style={{ color: colors.danger, fontWeight: '700', fontSize: 16 }}>✕</RNText>
-                            </Pressable>
-                          </View>
-                        )
-                        : undefined
-                    }
-                  />
+                    testID={`job-expense-row-${e.id}`}
+                    enabled={canManage}
+                    renderActions={(drag, methods) => (
+                      <RowSwipeActions
+                        drag={drag}
+                        methods={methods}
+                        onDelete={() => { methods.close(); handleDeleteExpense(e.id); }}
+                        onEdit={() => { methods.close(); openEditExpense(e); }}
+                        testIDDelete={`job-expense-delete-${e.id}`}
+                        testIDEdit={`job-expense-edit-${e.id}`}
+                        deleteLabel="Delete expense"
+                        editLabel="Edit expense"
+                      />
+                    )}
+                  >
+                    <ListRow
+                      title={formatCurrency(e.amount)}
+                      subtitle={`${e.category}${e.vendor ? ' · ' + e.vendor : ''} · ${formatDate(e.date)}`}
+                      trailing="none"
+                    />
+                  </SwipeRow>
                 ))}
               </>
             )}
@@ -512,10 +620,13 @@ export default function JobDetailScreen() {
               />
             )}
             {timeEntries.length === 0 ? (
-              <View style={s.emptyState}>
-                <IconSymbol name={'clock' as never} size={40} color={colors.mutedLight} />
-                <RNText style={{ textAlign: 'center', color: colors.muted, fontSize: 15 }}>No time entries yet.</RNText>
-              </View>
+              <EmptyState
+                icon="clock"
+                message="No time entries."
+                actionLabel={canManage ? 'Add Entry' : undefined}
+                onAction={canManage ? () => router.push({ pathname: '/timesheets/manual', params: { jobId: id } }) : undefined}
+                testID="jobdetail-time-empty"
+              />
             ) : (
               <>
                 <Card elevation="sm" padding="sm" radius="md">
@@ -525,26 +636,29 @@ export default function JobDetailScreen() {
                   </View>
                 </Card>
                 {timeEntries.map(e => (
-                  <ListRow
+                  <SwipeRow
                     key={e.id}
-                    title={e.employeeName}
-                    subtitle={`${formatDate(e.date)}${e.note ? ' · ' + e.note : ''} · ${formatHours(e.hours)}`}
-                    trailing={canManage ? 'custom' : 'none'}
-                    trailingCustom={
-                      canManage
-                        ? (
-                          <View style={{ flexDirection: 'row', gap: 6 }}>
-                            <Pressable onPress={() => openEditTimeEntry(e)} style={[s.editRowBtn, { borderColor: colors.border, backgroundColor: colors.bg }]}>
-                              <RNText style={{ fontSize: 11, fontWeight: '700', color: colors.muted }}>Edit</RNText>
-                            </Pressable>
-                            <Pressable onPress={() => handleDeleteTimeEntry(e.id)} style={{ padding: 8 }}>
-                              <RNText style={{ color: colors.danger, fontWeight: '700', fontSize: 16 }}>✕</RNText>
-                            </Pressable>
-                          </View>
-                        )
-                        : undefined
-                    }
-                  />
+                    testID={`job-time-row-${e.id}`}
+                    enabled={canManage}
+                    renderActions={(drag, methods) => (
+                      <RowSwipeActions
+                        drag={drag}
+                        methods={methods}
+                        onDelete={() => { methods.close(); handleDeleteTimeEntry(e.id); }}
+                        onEdit={() => { methods.close(); openEditTimeEntry(e); }}
+                        testIDDelete={`job-time-delete-${e.id}`}
+                        testIDEdit={`job-time-edit-${e.id}`}
+                        deleteLabel="Delete entry"
+                        editLabel="Edit entry"
+                      />
+                    )}
+                  >
+                    <ListRow
+                      title={e.employeeName}
+                      subtitle={`${formatDate(e.date)}${e.note ? ' · ' + e.note : ''} · ${formatHours(e.hours)}`}
+                      trailing="none"
+                    />
+                  </SwipeRow>
                 ))}
               </>
             )}
@@ -680,5 +794,5 @@ const s = StyleSheet.create({
   statCardWrapper: { flex: 1, minWidth: '45%' },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   emptyState: { alignItems: 'center', paddingVertical: 32, gap: 8 },
-  editRowBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
+  swipeBtn: { width: SWIPE_BUTTON_WIDTH, alignItems: 'center', justifyContent: 'center' },
 });
