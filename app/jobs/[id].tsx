@@ -13,12 +13,17 @@ import { useApi } from '../../src/mobile/hooks/useApi';
 import { useAuth } from '../../src/mobile/context/AuthContext';
 import { useTheme } from '../../src/mobile/theme';
 import type { JobExpense, JobIncome, JobListItem, JobTimeEntry } from '../../src/mobile/types';
-import { formatCurrency, formatDate, formatHours, isActiveStatus, isManagerOrAdmin } from '../../src/mobile/utils';
+import {
+  formatCurrency, formatDate, formatDateInputValue, formatHours,
+  isActiveStatus, isManagerOrAdmin,
+  validateAmount, validateDate, validateHours, validateRequired,
+} from '../../src/mobile/utils';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { DateField } from '@/components/ui/DateField';
 import { Input } from '@/components/ui/Input';
 import { ListRow } from '@/components/ui/ListRow';
 import { Sheet } from '@/components/ui/Sheet';
@@ -168,7 +173,10 @@ export default function JobDetailScreen() {
   const [expAmount, setExpAmount] = useState('');
   const [expDate, setExpDate] = useState('');
   const [expSaving, setExpSaving] = useState(false);
+  const [expCategoryError, setExpCategoryError] = useState<string | undefined>(undefined);
+  const [expVendorError, setExpVendorError] = useState<string | undefined>(undefined);
   const [expAmountError, setExpAmountError] = useState<string | undefined>(undefined);
+  const [expDateError, setExpDateError] = useState<string | undefined>(undefined);
 
   const [editTimeEntry, setEditTimeEntry] = useState<JobTimeEntry | null>(null);
   const [timeEditHours, setTimeEditHours] = useState('');
@@ -182,6 +190,8 @@ export default function JobDetailScreen() {
   const [incomeDesc, setIncomeDesc] = useState('');
   const [incomeSaving, setIncomeSaving] = useState(false);
   const [incomeAmountError, setIncomeAmountError] = useState<string | undefined>(undefined);
+  const [incomeDateError, setIncomeDateError] = useState<string | undefined>(undefined);
+  const [incomeDescError, setIncomeDescError] = useState<string | undefined>(undefined);
 
   const jobId = Number(id);
 
@@ -219,8 +229,13 @@ export default function JobDetailScreen() {
   };
 
   const handleAddIncome = async () => {
-    if (!incomeAmount.trim()) { setIncomeAmountError('Enter a valid amount'); return; }
-    setIncomeAmountError(undefined);
+    const amountErr = validateAmount(incomeAmount);
+    const dateErr = validateRequired(incomeDate, 'Date') ?? validateDate(incomeDate);
+    const descErr = validateRequired(incomeDesc, 'Description');
+    setIncomeAmountError(amountErr);
+    setIncomeDateError(dateErr);
+    setIncomeDescError(descErr);
+    if (amountErr || dateErr || descErr) return;
     setIncomeSaving(true);
     try {
       await api.addJobIncome(jobId, {
@@ -240,17 +255,24 @@ export default function JobDetailScreen() {
     setExpVendor(exp.vendor ?? '');
     setExpAmount(String(exp.amount));
     setExpDate(exp.date);
+    setExpCategoryError(undefined);
+    setExpVendorError(undefined);
     setExpAmountError(undefined);
+    setExpDateError(undefined);
   };
 
   const confirmEditExpense = async () => {
     if (!editExpenseEntry) return;
+    const categoryErr = validateRequired(expCategory, 'Category');
+    const vendorErr = validateRequired(expVendor, 'Vendor');
+    const amountErr = validateAmount(expAmount);
+    const dateErr = validateRequired(expDate, 'Date') ?? validateDate(expDate);
+    setExpCategoryError(categoryErr);
+    setExpVendorError(vendorErr);
+    setExpAmountError(amountErr);
+    setExpDateError(dateErr);
+    if (categoryErr || vendorErr || amountErr || dateErr) return;
     const amount = parseFloat(expAmount);
-    if (isNaN(amount) || amount <= 0) {
-      setExpAmountError('Enter a valid amount');
-      return;
-    }
-    setExpAmountError(undefined);
     setExpSaving(true);
     try {
       await api.editExpense(editExpenseEntry.id, {
@@ -316,12 +338,10 @@ export default function JobDetailScreen() {
 
   const confirmEditTimeEntry = async () => {
     if (!editTimeEntry) return;
+    const hoursErr = validateHours(timeEditHours);
+    setTimeEditHoursError(hoursErr);
+    if (hoursErr) return;
     const hours = parseFloat(timeEditHours);
-    if (isNaN(hours) || hours <= 0 || hours > 24) {
-      setTimeEditHoursError('Enter valid hours (0–24)');
-      return;
-    }
-    setTimeEditHoursError(undefined);
     setTimeEditSaving(true);
     try {
       await api.editTimeEntry(editTimeEntry.id, {
@@ -371,6 +391,12 @@ export default function JobDetailScreen() {
   const f = job.financials;
   const totalExpenses = expenseList.reduce((sum, e) => sum + e.amount, 0);
   const totalTime = timeEntries.reduce((sum, e) => sum + e.hours, 0);
+
+  // Derive Date values for the DateFields from the YYYY-MM-DD string state.
+  // Anchor at local midnight so the displayed day matches the stored string
+  // regardless of timezone (mirrors expenses/new.tsx).
+  const expDateValue = /^\d{4}-\d{2}-\d{2}$/.test(expDate) ? new Date(`${expDate}T00:00:00`) : null;
+  const incomeDateValue = /^\d{4}-\d{2}-\d{2}$/.test(incomeDate) ? new Date(`${incomeDate}T00:00:00`) : null;
 
   return (
     <Screen headerMode="native" padded={false}>
@@ -695,6 +721,7 @@ export default function JobDetailScreen() {
             </Text>
           ) : null}
           <Input
+            bottomSheet
             label="Hours"
             placeholder="e.g. 8.0"
             value={timeEditHours}
@@ -703,6 +730,7 @@ export default function JobDetailScreen() {
             error={timeEditHoursError}
           />
           <Input
+            bottomSheet
             label="Note (optional)"
             placeholder="Optional note"
             value={timeEditNote}
@@ -715,7 +743,8 @@ export default function JobDetailScreen() {
       {!!editExpenseEntry && (
         <Sheet
           testID="jobdetail-edit-expense-sheet"
-          snapPoints={['60%']}
+          snapPoints={['72%', '92%']}
+          scrollable
           onClose={() => setEditExpenseEntry(null)}
           header={
             <SheetHeader
@@ -727,18 +756,23 @@ export default function JobDetailScreen() {
           }
         >
           <Input
+            bottomSheet
             label="Category"
             placeholder="Category"
             value={expCategory}
-            onChangeText={setExpCategory}
+            onChangeText={(v) => { setExpCategory(v); if (expCategoryError) setExpCategoryError(undefined); }}
+            error={expCategoryError}
           />
           <Input
-            label="Vendor (optional)"
+            bottomSheet
+            label="Vendor"
             placeholder="Vendor"
             value={expVendor}
-            onChangeText={setExpVendor}
+            onChangeText={(v) => { setExpVendor(v); if (expVendorError) setExpVendorError(undefined); }}
+            error={expVendorError}
           />
           <Input
+            bottomSheet
             label="Amount"
             placeholder="0.00"
             value={expAmount}
@@ -746,11 +780,16 @@ export default function JobDetailScreen() {
             keyboardType="decimal-pad"
             error={expAmountError}
           />
-          <Input
+          <DateField
             label="Date"
-            placeholder="YYYY-MM-DD"
-            value={expDate}
-            onChangeText={setExpDate}
+            value={expDateValue}
+            onChange={(d) => {
+              setExpDate(formatDateInputValue(d));
+              if (expDateError) setExpDateError(undefined);
+            }}
+            error={expDateError}
+            maximumDate={new Date()}
+            testID="jobdetail-edit-expense-date-picker"
           />
         </Sheet>
       )}
@@ -759,7 +798,8 @@ export default function JobDetailScreen() {
       {addingIncome && (
         <Sheet
           testID="jobdetail-add-income-sheet"
-          fitContent
+          snapPoints={['72%', '92%']}
+          scrollable
           onClose={() => setAddingIncome(false)}
           header={
             <SheetHeader
@@ -771,6 +811,7 @@ export default function JobDetailScreen() {
           }
         >
           <Input
+            bottomSheet
             label="Amount"
             placeholder="0.00"
             value={incomeAmount}
@@ -778,17 +819,24 @@ export default function JobDetailScreen() {
             keyboardType="decimal-pad"
             error={incomeAmountError}
           />
-          <Input
+          <DateField
             label="Date"
-            placeholder="YYYY-MM-DD"
-            value={incomeDate}
-            onChangeText={setIncomeDate}
+            value={incomeDateValue}
+            onChange={(d) => {
+              setIncomeDate(formatDateInputValue(d));
+              if (incomeDateError) setIncomeDateError(undefined);
+            }}
+            error={incomeDateError}
+            maximumDate={new Date()}
+            testID="jobdetail-add-income-date-picker"
           />
           <Input
-            label="Description (optional)"
-            placeholder="Optional description"
+            bottomSheet
+            label="Description"
+            placeholder="Description"
             value={incomeDesc}
-            onChangeText={setIncomeDesc}
+            onChangeText={(v) => { setIncomeDesc(v); if (incomeDescError) setIncomeDescError(undefined); }}
+            error={incomeDescError}
           />
         </Sheet>
       )}
