@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -132,11 +133,13 @@ export default function ManualTimeEntryScreen() {
   // ---- save handler — API call UNCHANGED -----------------------------------
   const handleSave = async () => {
     if (!selectedJobId) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       setJobError('Select a job');
       return;
     }
     const h = parseFloat(hours);
     if (!hours.trim() || isNaN(h) || h <= 0) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       setHoursError('Enter valid hours');
       return;
     }
@@ -149,10 +152,12 @@ export default function ManualTimeEntryScreen() {
         hours: h,
         note: note.trim() || undefined,
       });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Saved', 'Time entry recorded.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (e) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Error', e instanceof Error ? e.message : 'Failed to save.');
     } finally {
       setSaving(false);

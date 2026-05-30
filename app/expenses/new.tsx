@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -149,7 +150,10 @@ export default function NewExpenseScreen() {
     if (!selectedJobId) { setJobError('Select a job'); hasError = true; }
     if (!amount.trim()) { setAmountError('Enter an amount'); hasError = true; }
     if (!receiptFilename) { setReceiptError('Upload a receipt photo'); hasError = true; }
-    if (hasError) return;
+    if (hasError) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
 
     setSaving(true);
     try {
@@ -161,8 +165,10 @@ export default function NewExpenseScreen() {
         date,
         receiptFilename: receiptFilename!,
       });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Saved', 'Expense logged successfully.', [{ text: 'OK', onPress: () => router.back() }]);
     } catch (e) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Error', e instanceof Error ? e.message : 'Failed to save expense.');
       setSaving(false);
     }

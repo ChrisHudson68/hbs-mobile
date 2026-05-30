@@ -1,4 +1,5 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -133,7 +134,10 @@ export default function NewInvoiceScreen() {
       setDueError('Enter a due date');
       hasError = true;
     }
-    if (hasError) return;
+    if (hasError) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
 
     setSaving(true);
     try {
@@ -146,11 +150,13 @@ export default function NewInvoiceScreen() {
         amount: amt,
         notes: notes.trim() || undefined,
       });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Created', 'Invoice created successfully.', [
         { text: 'View', onPress: () => router.replace(`/invoices/${res.invoice?.id ?? ''}`) },
         { text: 'Done', onPress: () => router.back() },
       ]);
     } catch (e) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Error', e instanceof Error ? e.message : 'Failed to create invoice.');
       setSaving(false);
     }
