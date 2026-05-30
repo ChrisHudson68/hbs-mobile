@@ -94,6 +94,9 @@ export function Sheet({
       onChange={handleChange}
       enablePanDownToClose
       enableDynamicSizing={dynamic}
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
       backdropComponent={renderBackdrop}
       backgroundStyle={{ backgroundColor: colors.card }}
       handleIndicatorStyle={{

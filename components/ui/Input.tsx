@@ -10,6 +10,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 
 import { useTheme } from '../../src/mobile/theme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -52,6 +53,13 @@ type InputProps = {
   autoCorrect?: TextInputProps['autoCorrect'];
   placeholder?: string;
   editable?: boolean;
+  /**
+   * When true, renders @gorhom/bottom-sheet's BottomSheetTextInput instead of the
+   * RN TextInput so the field coordinates with the sheet's keyboard handling (lifts
+   * above the keyboard). Default false = byte-for-byte unchanged RN TextInput.
+   * Only set this for Inputs rendered inside a <Sheet>.
+   */
+  bottomSheet?: boolean;
   testID?: string;
 };
 
@@ -80,6 +88,7 @@ export function Input({
   autoCorrect,
   placeholder,
   editable = true,
+  bottomSheet = false,
   testID,
 }: InputProps) {
   const { colors, spacing, radius, typographyRamp } = useTheme();
@@ -121,22 +130,41 @@ export function Input({
         {leftIcon ? (
           <IconSymbol name={leftIcon as never} size={ICON_SIZE} color={colors.muted} />
         ) : null}
-        <TextInput
-          style={[s.input, inputTextStyle]}
-          value={value}
-          onChangeText={onChangeText}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          placeholder={placeholder}
-          placeholderTextColor={colors.mutedLight}
-          secureTextEntry={secureTextEntry}
-          keyboardType={keyboardType}
-          returnKeyType={returnKeyType}
-          autoCapitalize={autoCapitalize}
-          autoCorrect={autoCorrect}
-          editable={editable}
-          testID={testID}
-        />
+        {bottomSheet ? (
+          <BottomSheetTextInput
+            style={[s.input, inputTextStyle]}
+            value={value}
+            onChangeText={onChangeText}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            placeholder={placeholder}
+            placeholderTextColor={colors.mutedLight}
+            secureTextEntry={secureTextEntry}
+            keyboardType={keyboardType}
+            returnKeyType={returnKeyType}
+            autoCapitalize={autoCapitalize}
+            autoCorrect={autoCorrect}
+            editable={editable}
+            testID={testID}
+          />
+        ) : (
+          <TextInput
+            style={[s.input, inputTextStyle]}
+            value={value}
+            onChangeText={onChangeText}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            placeholder={placeholder}
+            placeholderTextColor={colors.mutedLight}
+            secureTextEntry={secureTextEntry}
+            keyboardType={keyboardType}
+            returnKeyType={returnKeyType}
+            autoCapitalize={autoCapitalize}
+            autoCorrect={autoCorrect}
+            editable={editable}
+            testID={testID}
+          />
+        )}
         {rightIcon && onRightIconPress ? (
           <Pressable
             onPress={onRightIconPress}

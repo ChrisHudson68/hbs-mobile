@@ -65,9 +65,10 @@ export function Screen({
   const inner = scroll ? (
     <ScrollView
       style={s.flex}
-      contentContainerStyle={contentPadding}
+      contentContainerStyle={[s.scrollContent, contentPadding]}
       keyboardShouldPersistTaps="handled"
       contentInsetAdjustmentBehavior={isNativeHeader ? 'automatic' : 'never'}
+      automaticallyAdjustKeyboardInsets
     >
       {children}
     </ScrollView>
@@ -95,4 +96,5 @@ export function Screen({
 
 const s = StyleSheet.create({
   flex: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
 });
