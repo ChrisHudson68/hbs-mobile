@@ -1,10 +1,11 @@
 import { SymbolViewProps } from 'expo-symbols';
 import { ReactNode } from 'react';
-import { Pressable, StyleSheet, Switch, Text as RNText, View, ViewStyle } from 'react-native';
+import { StyleSheet, Switch, Text as RNText, View, ViewStyle } from 'react-native';
 
 import { useTheme } from '../../src/mobile/theme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Text } from '@/components/ui/Text';
+import { AnimatedPressable } from '@/components/ui/AnimatedPressable';
 
 /** SF Symbol name (the broad expo-symbols contract). */
 type SFSymbolName = SymbolViewProps['name'];
@@ -156,9 +157,9 @@ export function ListRow({
 
   if (onPress && trailing !== 'switch') {
     return (
-      <Pressable onPress={onPress} testID={testID} style={({ pressed }) => pressed && s.pressed}>
+      <AnimatedPressable onPress={onPress} testID={testID}>
         {content}
-      </Pressable>
+      </AnimatedPressable>
     );
   }
 
@@ -178,8 +179,5 @@ const s = StyleSheet.create({
   badge: {
     alignSelf: 'center',
     justifyContent: 'center',
-  },
-  pressed: {
-    opacity: 0.85,
   },
 });

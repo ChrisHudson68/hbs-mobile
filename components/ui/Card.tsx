@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
 
 import { useTheme } from '../../src/mobile/theme';
+import { AnimatedPressable } from '@/components/ui/AnimatedPressable';
 
 type CardElevation = 'none' | 'sm' | 'md';
 type CardPadding = 'none' | 'sm' | 'md' | 'lg';
@@ -18,6 +19,15 @@ type CardProps = {
   tone?: CardTone;
   /** Maps to a Radius token. */
   radius?: CardRadius;
+  /**
+   * Optional: when set, wraps the card surface in AnimatedPressable so the
+   * card gets D-09 scale+dim press feedback (MOTION-03). When absent, Card
+   * renders as a plain non-interactive View — zero behavior change for
+   * existing callers. Wave-2 consumers (Jobs, Invoices) route their row tap
+   * through this prop instead of an outer plain Pressable so MOTION-03 covers
+   * the card rows that were previously plain-Pressable+Card (no feedback).
+   */
+  onPress?: () => void;
   testID?: string;
 };
 
@@ -35,6 +45,7 @@ export function Card({
   padding = 'md',
   tone = 'default',
   radius = 'md',
+  onPress,
   testID,
 }: CardProps) {
   const { colors, spacing, radius: radiusTokens, elevation: elevationTokens } = useTheme();
@@ -53,11 +64,24 @@ export function Card({
     ...elevationTokens[elevation],
   };
 
-  return (
-    <View style={[s.base, surfaceStyle]} testID={testID}>
+  const surface = (
+    <View style={[s.base, surfaceStyle]} testID={onPress ? undefined : testID}>
       {children}
     </View>
   );
+
+  // When onPress is provided, wrap in AnimatedPressable for D-09 scale+dim
+  // press feedback (MOTION-03). AnimatedPressable carries s.fill (flex:1 +
+  // width:'100%') to prevent layout collapse (06-RESEARCH Pitfall 7).
+  if (onPress != null) {
+    return (
+      <AnimatedPressable onPress={onPress} testID={testID}>
+        {surface}
+      </AnimatedPressable>
+    );
+  }
+
+  return surface;
 }
 
 const s = StyleSheet.create({
