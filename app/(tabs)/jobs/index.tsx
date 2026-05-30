@@ -1,9 +1,11 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Pressable, RefreshControl,
-  ScrollView, StyleSheet, Text as RNText, View,
+  Pressable, RefreshControl,
+  ScrollView, Share, StyleSheet, Text as RNText, View,
 } from 'react-native';
+import * as ContextMenu from 'zeego/context-menu';
+import * as Haptics from 'expo-haptics';
 import { useApi } from '../../../src/mobile/hooks/useApi';
 import { useTheme } from '../../../src/mobile/theme';
 import type { JobListItem } from '../../../src/mobile/types';
@@ -21,7 +23,8 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Text } from '@/components/ui/Text';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { SkeletonRow } from '@/components/ui/SkeletonRow';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 type StatusFilter = 'active' | 'on-hold' | 'completed' | 'all';
 
@@ -89,11 +92,15 @@ export default function JobsScreen() {
     all: jobs.length,
   };
 
+  // --- Loading skeleton ---
   if (loading) {
     return (
-      <Screen headerMode="native">
-        <View style={s.center}>
-          <ActivityIndicator size="large" color={colors.navy} />
+      <Screen headerMode="native" testID="jobs-skeleton">
+        <View style={[s.skeletonContainer, { padding: spacing.md, gap: 10 }]}>
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
         </View>
       </Screen>
     );
@@ -107,7 +114,15 @@ export default function JobsScreen() {
       <ScrollView
         contentContainerStyle={{ padding: spacing.md, paddingTop: 0, gap: 10 }}
         contentInsetAdjustmentBehavior="automatic"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              void load(true);
+            }}
+          />
+        }
       >
         {/* Search box */}
         <View style={{ paddingTop: spacing.sm }}>
@@ -178,151 +193,153 @@ export default function JobsScreen() {
 
         {/* Empty state */}
         {isEmpty && (
-          <View style={{ alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm }}>
-            <IconSymbol
-              name={hasSearch ? 'magnifyingglass' : 'briefcase'}
-              size={48}
-              color={colors.mutedLight}
+          hasSearch ? (
+            <EmptyState
+              icon="magnifyingglass"
+              message="No jobs match your search"
+              testID="jobs-empty-state"
             />
-            {hasSearch ? (
-              <RNText
-                style={{
-                  fontSize: 17,
-                  fontWeight: '600',
-                  lineHeight: 23,
-                  color: colors.muted,
-                  textAlign: 'center',
-                }}
-              >
-                No jobs match your search
-              </RNText>
-            ) : (
-              <>
-                <RNText
-                  style={{
-                    fontSize: 17,
-                    fontWeight: '600',
-                    lineHeight: 23,
-                    color: colors.muted,
-                    textAlign: 'center',
-                  }}
-                >
-                  No jobs yet
-                </RNText>
-                <RNText
-                  style={{
-                    fontSize: 15,
-                    fontWeight: '400',
-                    lineHeight: 21,
-                    color: colors.mutedLight,
-                    textAlign: 'center',
-                    maxWidth: 240,
-                  }}
-                >
-                  {canManage
-                    ? 'Create your first job with + above.'
-                    : "Jobs you’re assigned to will appear here."}
-                </RNText>
-              </>
-            )}
-          </View>
+          ) : (
+            <EmptyState
+              icon="briefcase"
+              message="No jobs yet."
+              actionLabel={canManage ? 'Add Job' : undefined}
+              onAction={canManage ? () => router.push('/jobs/new') : undefined}
+              testID="jobs-empty-state"
+            />
+          )
         )}
 
-        {/* Job cards */}
-        {filtered.map((job, idx) => (
-          <Pressable
-            key={job.id}
-            onPress={() => router.push(`/jobs/${job.id}`)}
-          >
-            <Card
-              elevation="sm"
-              padding="md"
-              radius="lg"
-              testID={idx === 0 ? 'jobs-card-0' : undefined}
-            >
-              {/* Top row: name + status badge */}
-              <View style={s.cardTop}>
-                <View style={{ flex: 1 }}>
-                  <Text variant="headline" weight="600" numberOfLines={2}>
-                    {job.jobName ?? 'Untitled Job'}
-                  </Text>
-                  {job.clientName ? (
-                    <Text variant="subhead" tone="muted">
-                      {job.clientName}
+        {/* Job cards — long-press opens zeego context menu (Edit + Share ONLY) */}
+        {filtered.map(job => (
+          <ContextMenu.Root key={job.id}>
+            <ContextMenu.Trigger asChild>
+              {/*
+               * Card onPress activates AnimatedPressable (MOTION-03 press feedback).
+               * ContextMenu.Trigger asChild merges the long-press onto this Card
+               * without creating a second touch area, preserving tap-to-detail.
+               */}
+              <Card
+                elevation="sm"
+                padding="md"
+                radius="lg"
+                onPress={() => router.push(`/jobs/${job.id}`)}
+                testID={`jobs-card-${job.id}`}
+              >
+                {/* Top row: name + status badge */}
+                <View style={s.cardTop}>
+                  <View style={{ flex: 1 }}>
+                    <Text variant="headline" weight="600" numberOfLines={2}>
+                      {job.jobName ?? 'Untitled Job'}
                     </Text>
-                  ) : null}
-                </View>
-                <Badge
-                  tone={statusTone(job.status)}
-                  label={job.status ?? 'Active'}
-                />
-              </View>
-
-              {/* Overhead tag */}
-              {job.isOverhead ? (
-                <View style={{ marginTop: 4 }}>
-                  <Badge tone="warning" label="Overhead" size="sm" />
-                </View>
-              ) : null}
-
-              {/* Financials row — manager-gated */}
-              {job.financials && canManage ? (
-                <View
-                  style={[
-                    s.financials,
-                    {
-                      marginTop: 6,
-                      paddingTop: 6,
-                      borderTopWidth: 0.5,
-                      borderTopColor: colors.border,
-                      gap: spacing.md,
-                    },
-                  ]}
-                >
-                  {/* Profit */}
-                  <View style={s.finItem}>
-                    <RNText style={{ fontSize: 12, color: colors.muted }}>Profit</RNText>
-                    <RNText
-                      style={{
-                        fontSize: 12,
-                        fontWeight: '600',
-                        color: Number(job.financials.profit) >= 0
-                          ? colors.success
-                          : colors.danger,
-                      }}
-                    >
-                      {formatCurrency(job.financials.profit)}
-                    </RNText>
+                    {job.clientName ? (
+                      <Text variant="subhead" tone="muted">
+                        {job.clientName}
+                      </Text>
+                    ) : null}
                   </View>
+                  <Badge
+                    tone={statusTone(job.status)}
+                    label={job.status ?? 'Active'}
+                  />
+                </View>
 
-                  {/* Hours */}
-                  <View style={s.finItem}>
-                    <RNText style={{ fontSize: 12, color: colors.muted }}>Hours</RNText>
-                    <RNText style={{ fontSize: 12, fontWeight: '600', color: colors.muted }}>
-                      {Number(job.financials.totalHours).toFixed(1)} hrs
-                    </RNText>
+                {/* Overhead tag */}
+                {job.isOverhead ? (
+                  <View style={{ marginTop: 4 }}>
+                    <Badge tone="warning" label="Overhead" size="sm" />
                   </View>
+                ) : null}
 
-                  {/* Unpaid invoices */}
-                  {Number(job.financials.unpaidInvoices) > 0 ? (
+                {/* Financials row — manager-gated */}
+                {job.financials && canManage ? (
+                  <View
+                    style={[
+                      s.financials,
+                      {
+                        marginTop: 6,
+                        paddingTop: 6,
+                        borderTopWidth: 0.5,
+                        borderTopColor: colors.border,
+                        gap: spacing.md,
+                      },
+                    ]}
+                  >
+                    {/* Profit */}
                     <View style={s.finItem}>
-                      <RNText style={{ fontSize: 12, color: colors.muted }}>Unpaid</RNText>
-                      <RNText style={{ fontSize: 12, fontWeight: '600', color: colors.danger }}>
-                        {formatCurrency(job.financials.unpaidInvoices)}
+                      <RNText style={{ fontSize: 12, color: colors.muted }}>Profit</RNText>
+                      <RNText
+                        style={{
+                          fontSize: 12,
+                          fontWeight: '600',
+                          color: Number(job.financials.profit) >= 0
+                            ? colors.success
+                            : colors.danger,
+                        }}
+                      >
+                        {formatCurrency(job.financials.profit)}
                       </RNText>
                     </View>
-                  ) : (
+
+                    {/* Hours */}
                     <View style={s.finItem}>
-                      <RNText style={{ fontSize: 12, color: colors.muted }}>Unpaid</RNText>
+                      <RNText style={{ fontSize: 12, color: colors.muted }}>Hours</RNText>
                       <RNText style={{ fontSize: 12, fontWeight: '600', color: colors.muted }}>
-                        —
+                        {Number(job.financials.totalHours).toFixed(1)} hrs
                       </RNText>
                     </View>
-                  )}
-                </View>
-              ) : null}
-            </Card>
-          </Pressable>
+
+                    {/* Unpaid invoices */}
+                    {Number(job.financials.unpaidInvoices) > 0 ? (
+                      <View style={s.finItem}>
+                        <RNText style={{ fontSize: 12, color: colors.muted }}>Unpaid</RNText>
+                        <RNText style={{ fontSize: 12, fontWeight: '600', color: colors.danger }}>
+                          {formatCurrency(job.financials.unpaidInvoices)}
+                        </RNText>
+                      </View>
+                    ) : (
+                      <View style={s.finItem}>
+                        <RNText style={{ fontSize: 12, color: colors.muted }}>Unpaid</RNText>
+                        <RNText style={{ fontSize: 12, fontWeight: '600', color: colors.muted }}>
+                          —
+                        </RNText>
+                      </View>
+                    )}
+                  </View>
+                ) : null}
+              </Card>
+            </ContextMenu.Trigger>
+
+            {/*
+             * Context menu: EXACTLY TWO items — Edit Job + Share Job Details.
+             * There is NO Delete item (no client method, no backend
+             * DELETE /api/jobs/:id mobile route). Both items are all-roles
+             * (no `hidden` gate needed this phase).
+             */}
+            <ContextMenu.Content>
+              <ContextMenu.Item
+                key="edit"
+                onSelect={() => {
+                  router.push({ pathname: '/jobs/new', params: { editId: job.id } });
+                }}
+              >
+                <ContextMenu.ItemIcon ios={{ name: 'pencil.circle' }} />
+                <ContextMenu.ItemTitle>Edit Job</ContextMenu.ItemTitle>
+              </ContextMenu.Item>
+
+              <ContextMenu.Item
+                key="share"
+                onSelect={() => {
+                  void Share.share({
+                    message: `${job.jobName} — ${job.clientName ?? ''}\nStatus: ${job.status ?? 'Active'}`,
+                  });
+                }}
+              >
+                <ContextMenu.ItemIcon ios={{ name: 'square.and.arrow.up' }} />
+                <ContextMenu.ItemTitle>Share Job Details</ContextMenu.ItemTitle>
+              </ContextMenu.Item>
+            </ContextMenu.Content>
+          </ContextMenu.Root>
         ))}
 
         {/* Bottom padding */}
@@ -333,7 +350,7 @@ export default function JobsScreen() {
 }
 
 const s = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  skeletonContainer: {},
   chip: {},
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   financials: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
