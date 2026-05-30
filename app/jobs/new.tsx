@@ -4,10 +4,11 @@ import {
   ActivityIndicator, Alert, Pressable,
   ScrollView, StyleSheet, Switch, TextInput, View,
 } from 'react-native';
-import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApi } from '../../src/mobile/hooks/useApi';
+import { formatDateInputValue, validateAmount } from '../../src/mobile/utils';
 import { useTheme } from '../../src/mobile/theme';
 import { Button } from '@/components/ui/Button';
+import { DateField } from '@/components/ui/DateField';
 import { Input } from '@/components/ui/Input';
 import { ListRow } from '@/components/ui/ListRow';
 import { Screen } from '@/components/ui/Screen';
@@ -21,21 +22,20 @@ export default function NewJobScreen() {
   const { editId } = useLocalSearchParams<{ editId?: string }>();
   const isEditing = Boolean(editId);
   const { colors, spacing, radius, typographyRamp } = useTheme();
-  const frame = useSafeAreaFrame();
-  const insets = useSafeAreaInsets();
 
   const [jobName, setJobName] = useState('');
   const [jobCode, setJobCode] = useState('');
   const [clientName, setClientName] = useState('');
   const [soldBy, setSoldBy] = useState('');
   const [contractAmount, setContractAmount] = useState('');
-  const [startDate, setStartDate] = useState('');
+  const [startDate, setStartDate] = useState<Date | null>(null);
   const [status, setStatus] = useState('Active');
   const [isOverhead, setIsOverhead] = useState(false);
   const [jobDescription, setJobDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(isEditing);
   const [jobNameError, setJobNameError] = useState<string | undefined>(undefined);
+  const [contractAmountError, setContractAmountError] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!editId) return;
@@ -55,8 +55,18 @@ export default function NewJobScreen() {
   }, [editId, api]);
 
   const handleSave = async () => {
-    if (!jobName.trim()) { setJobNameError('Job name is required'); return; }
-    setJobNameError(undefined);
+    // Required: job name. Optional but validated when present: contract amount.
+    // Start date comes from DateField (a Date | null) — never free text, so it
+    // needs no date-format validation.
+    const nameError = jobName.trim() ? undefined : 'Job name is required';
+    const amountError = contractAmount.trim()
+      ? validateAmount(contractAmount, 'Contract Amount')
+      : undefined;
+
+    setJobNameError(nameError);
+    setContractAmountError(amountError);
+    if (nameError || amountError) return;
+
     setSaving(true);
     try {
       const args = {
@@ -65,7 +75,7 @@ export default function NewJobScreen() {
         clientName: clientName.trim() || undefined,
         soldBy: soldBy.trim() || undefined,
         contractAmount: contractAmount.trim() ? parseFloat(contractAmount) : undefined,
-        startDate: startDate.trim() || undefined,
+        startDate: startDate ? formatDateInputValue(startDate) : undefined,
         status,
         isOverhead,
         jobDescription: jobDescription.trim() || undefined,
@@ -101,14 +111,8 @@ export default function NewJobScreen() {
   }
 
   return (
-    <Screen headerMode="native" padded={false} keyboardAvoiding>
-      <View style={{ height: frame.height - insets.top }}>
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: spacing.md, gap: spacing.md, paddingBottom: 24 }}
-        contentInsetAdjustmentBehavior="automatic"
-        keyboardShouldPersistTaps="handled"
-      >
+    <Screen headerMode="native" scroll keyboardAvoiding>
+      <View style={{ gap: spacing.md, paddingVertical: spacing.md }}>
         <Input
           label="Job Name"
           value={jobName}
@@ -148,18 +152,19 @@ export default function NewJobScreen() {
         <Input
           label="Contract Amount"
           value={contractAmount}
-          onChangeText={setContractAmount}
+          onChangeText={(v) => { setContractAmount(v); if (contractAmountError) setContractAmountError(undefined); }}
+          error={contractAmountError}
           leftIcon="dollarsign.circle"
           placeholder="0.00"
           keyboardType="decimal-pad"
         />
 
-        <Input
+        <DateField
           label="Start Date"
           value={startDate}
-          onChangeText={setStartDate}
-          leftIcon="calendar"
-          placeholder="2025-01-15"
+          onChange={setStartDate}
+          placeholder="Optional — tap to pick a date"
+          testID="newjob-startdate-picker"
         />
 
         {/* Status chip row — scrollable, NOT a SegmentedControl (5 options don't fit) */}
@@ -230,10 +235,8 @@ export default function NewJobScreen() {
             />
           }
         />
-      </ScrollView>
 
-      {/* Save button pinned outside ScrollView */}
-      <View style={{ padding: spacing.md }}>
+        {/* Save button — scrolls above the keyboard with the form */}
         <Button
           variant="primary"
           size="lg"
@@ -243,7 +246,6 @@ export default function NewJobScreen() {
           onPress={() => void handleSave()}
           testID="newjob-save-button"
         />
-      </View>
       </View>
     </Screen>
   );
