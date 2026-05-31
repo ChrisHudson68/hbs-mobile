@@ -135,7 +135,22 @@ export const Elevation = {
 export const Motion = {
   fast: { duration: 150, easing: 'decelerate' as const },
   base: { duration: 250, easing: 'standard' as const },
+  // accelerate = ease-in: EXIT / morph-away only. NEVER use for an entrance —
+  // ease-in on UI reads as sluggish (consume Motion.slow.duration directly).
   slow: { duration: 400, easing: 'accelerate' as const },
+} as const;
+
+// Spring presets (Premium-Feel W0) — plain `withSpring` configs (numbers only;
+// theme.ts stays Reanimated-free). Bounce kept subtle per Emil Kowalski
+// (overshoot ~0.1–0.3). Consume via withSpring(to, Spring.x).
+//   snappy — press release; quick settle with faint life (matches the validated
+//            AnimatedPressable feel, dampingRatio ~0.57).
+//   gentle — calm, near-critical settle for larger surfaces (Apple-calm).
+//   bouncy — subtle overshoot for signature / playful moments (W3 clock-in).
+export const Spring = {
+  snappy: { damping: 18, stiffness: 250, mass: 1 },
+  gentle: { damping: 20, stiffness: 120, mass: 1 },
+  bouncy: { damping: 16, stiffness: 180, mass: 1 },
 } as const;
 
 // iOS HIG type ramp — consumed by the <Text> kit component only (separate from
@@ -167,6 +182,7 @@ export const LightTheme = {
   typographyRamp: IOSTypeRamp,
   elevation: Elevation,
   motion: Motion,
+  spring: Spring,
 } as const;
 
 export const DarkTheme = {
@@ -176,6 +192,7 @@ export const DarkTheme = {
   typographyRamp: IOSTypeRamp,
   elevation: Elevation,
   motion: Motion,
+  spring: Spring,
 } as const;
 
 // `Theme` stays exported as an alias of `LightTheme` so any existing importer
