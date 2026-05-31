@@ -16,8 +16,10 @@ import type { Employee } from '../../src/mobile/types';
 import { formatCurrency } from '../../src/mobile/utils';
 
 function payLabel(emp: Employee) {
-  if (emp.payType === 'salary' && emp.annualSalary) {
-    return `Salary · ${formatCurrency(emp.annualSalary)}/yr`;
+  if (emp.payType?.toLowerCase() === 'salary') {
+    return emp.annualSalary
+      ? `Salary · ${formatCurrency(emp.annualSalary)}/yr`
+      : 'Salary · rate not set';
   }
   if (emp.hourlyRate) {
     return `Hourly · ${formatCurrency(emp.hourlyRate)}/hr`;
@@ -130,7 +132,7 @@ export default function EmployeesScreen() {
                 <View
                   style={[
                     s.avatar,
-                    { backgroundColor: colors.navy, borderRadius: radius.pill },
+                    { backgroundColor: colors.navySurface, borderRadius: radius.pill },
                   ]}
                 >
                   <Text variant="footnote" weight="600" tone="inverse">

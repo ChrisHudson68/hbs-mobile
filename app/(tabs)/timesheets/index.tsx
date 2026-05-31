@@ -116,7 +116,7 @@ function TimeRowSwipeActions({
     return (
       <Animated.View style={[{ width: panelWidth, flexDirection: 'row' }, animStyle]}>
         <Pressable
-          style={[s.swipeBtn, { backgroundColor: colors.navy, borderRadius: radius.sm }]}
+          style={[s.swipeBtn, { backgroundColor: colors.navySurface, borderRadius: radius.sm }]}
           onPress={() => { methods.close(); onEdit(); }}
           accessibilityLabel="Edit entry"
           testID={`timesheet-edit-${entryId}`}
@@ -674,7 +674,7 @@ export default function TimesheetsScreen() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: spacing.sm, flexDirection: 'row', paddingVertical: 2 }}
+              contentContainerStyle={{ gap: spacing.sm, flexDirection: 'row', paddingVertical: 2, paddingRight: spacing.md }}
             >
               <Pressable
                 style={[s.chip, {
@@ -683,7 +683,7 @@ export default function TimesheetsScreen() {
                   justifyContent: 'center', alignItems: 'center',
                 },
                 !selectedEmployeeId
-                  ? { backgroundColor: colors.navy, borderColor: colors.navy }
+                  ? { backgroundColor: colors.navySurface, borderColor: colors.navySurface }
                   : { backgroundColor: colors.card, borderColor: colors.border },
                 ]}
                 onPress={() => setSelectedEmployeeId(null)}
@@ -702,7 +702,7 @@ export default function TimesheetsScreen() {
                     justifyContent: 'center', alignItems: 'center',
                   },
                   selectedEmployeeId === emp.id
-                    ? { backgroundColor: colors.navy, borderColor: colors.navy }
+                    ? { backgroundColor: colors.navySurface, borderColor: colors.navySurface }
                     : { backgroundColor: colors.card, borderColor: colors.border },
                   ]}
                   onPress={() => setSelectedEmployeeId(emp.id)}
@@ -792,11 +792,11 @@ export default function TimesheetsScreen() {
 
         {/* Summary row */}
         <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-          <View style={[s.summaryCard, { backgroundColor: colors.card, borderRadius: radius.md, borderTopColor: colors.navy }]}>
+          <View style={[s.summaryCard, { backgroundColor: colors.card, borderRadius: radius.md, borderTopColor: colors.navySurface }]}>
             <Text variant="caption" tone="muted">HOURS</Text>
             <Text variant="title3" weight="700">{weekTotal.toFixed(2)}</Text>
           </View>
-          <View style={[s.summaryCard, { backgroundColor: colors.card, borderRadius: radius.md, borderTopColor: colors.navy }]}>
+          <View style={[s.summaryCard, { backgroundColor: colors.card, borderRadius: radius.md, borderTopColor: colors.navySurface }]}>
             <Text variant="caption" tone="muted">ENTRIES</Text>
             <Text variant="title3" weight="700">{String(weekEntries.length)}</Text>
           </View>
@@ -821,7 +821,7 @@ export default function TimesheetsScreen() {
             </>
           ) : canApprove && weekEntries.length > 0 ? (
             <Pressable
-              style={[s.summaryCard, { backgroundColor: colors.card, borderRadius: radius.md, borderTopColor: colors.navy, justifyContent: 'center' }]}
+              style={[s.summaryCard, { backgroundColor: colors.card, borderRadius: radius.md, borderTopColor: colors.navySurface, justifyContent: 'center' }]}
               onPress={() => void handleApproveWeek()}
               disabled={approveLoading}
             >
@@ -1036,7 +1036,7 @@ export default function TimesheetsScreen() {
                         justifyContent: 'center', alignItems: 'center',
                       },
                       editJobId === j.id
-                        ? { backgroundColor: colors.navy, borderColor: colors.navy }
+                        ? { backgroundColor: colors.navySurface, borderColor: colors.navySurface }
                         : { backgroundColor: colors.card, borderColor: colors.border },
                       ]}
                       onPress={() => setEditJobId(j.id)}

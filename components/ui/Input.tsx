@@ -139,6 +139,8 @@ export function Input({
             onBlur={() => setIsFocused(false)}
             placeholder={placeholder}
             placeholderTextColor={colors.mutedLight}
+            selectionColor={colors.navy}
+            cursorColor={colors.navy}
             secureTextEntry={secureTextEntry}
             keyboardType={keyboardType}
             returnKeyType={returnKeyType}
@@ -156,6 +158,8 @@ export function Input({
             onBlur={() => setIsFocused(false)}
             placeholder={placeholder}
             placeholderTextColor={colors.mutedLight}
+            selectionColor={colors.navy}
+            cursorColor={colors.navy}
             secureTextEntry={secureTextEntry}
             keyboardType={keyboardType}
             returnKeyType={returnKeyType}

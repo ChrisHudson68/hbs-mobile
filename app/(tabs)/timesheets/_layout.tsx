@@ -11,6 +11,8 @@ export default function TimesheetsStackLayout() {
         headerTransparent: false,
         headerBlurEffect: 'systemChromeMaterial',
         headerTintColor: colors.navy,
+        headerStyle: { backgroundColor: colors.bg },
+        headerLargeStyle: { backgroundColor: colors.bg },
         headerShadowVisible: false,
       }}
     >

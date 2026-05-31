@@ -137,7 +137,7 @@ function RowSwipeActions({
         <IconSymbol name={'trash' as never} size={20} color={colors.inverse} />
       </Pressable>
       <Pressable
-        style={[s.swipeBtn, { backgroundColor: colors.navy, borderRadius: radius.sm }]}
+        style={[s.swipeBtn, { backgroundColor: colors.navySurface, borderRadius: radius.sm }]}
         onPress={() => { methods.close(); onEdit(); }}
         accessibilityLabel={editLabel}
         testID={testIDEdit}
@@ -207,7 +207,11 @@ export default function JobDetailScreen() {
       ]);
       if (jobRes.job) {
         setJob(jobRes.job);
-        navigation.setOptions({ title: jobRes.job.jobName ?? 'Job Details' });
+        // Keep the native header generic — the navy hero (job name + client +
+        // status badges + Edit) is the single source of identity. Showing the
+        // job name here too duplicated it and made the hero read as an empty
+        // navy band on sparse jobs.
+        navigation.setOptions({ title: 'Job Details' });
       }
       if (incomeRes?.income) setIncome(incomeRes.income);
       if (expRes?.expenses) setExpenseList(expRes.expenses);
@@ -404,7 +408,7 @@ export default function JobDetailScreen() {
       <View
         testID="jobdetail-hero"
         style={{
-          backgroundColor: colors.navy,
+          backgroundColor: colors.navySurface,
           padding: spacing.md,
           gap: 4,
           borderBottomLeftRadius: radius.lg,
@@ -436,7 +440,8 @@ export default function JobDetailScreen() {
             onChange={(e) => void handleStatusChange(
               STATUS_VALUES[e.nativeEvent.selectedSegmentIndex]
             )}
-            tintColor={colors.navy}
+            tintColor={colors.navySurface}
+            activeFontStyle={{ color: colors.inverse }}
             enabled={!statusSaving}
           />
         </View>
@@ -448,7 +453,8 @@ export default function JobDetailScreen() {
           values={[...TAB_VALUES]}
           selectedIndex={TAB_KEYS.indexOf(tab)}
           onChange={(e) => setTab(TAB_KEYS[e.nativeEvent.selectedSegmentIndex])}
-          tintColor={colors.navy}
+          tintColor={colors.navySurface}
+          activeFontStyle={{ color: colors.inverse }}
           testID="jobdetail-section-tabs"
         />
       </View>
@@ -489,11 +495,20 @@ export default function JobDetailScreen() {
                   </View>
                   <View style={s.statCardWrapper}>
                     <Card elevation="sm" padding="sm" radius="md">
-                      <View style={{ borderTopWidth: 3, borderTopColor: Number(f.profit) >= 0 ? colors.success : colors.danger, marginBottom: 6 }} />
-                      <Text variant="caption" tone="muted">Profit</Text>
-                      <RNText style={{ color: Number(f.profit) >= 0 ? colors.success : colors.danger, fontSize: 17, fontWeight: '700' }}>
-                        {formatCurrency(f.profit)}
-                      </RNText>
+                      {(() => {
+                        const profit = Number(f.profit);
+                        const profitColor = profit > 0 ? colors.success : profit < 0 ? colors.danger : colors.muted;
+                        const profitBorder = profit > 0 ? colors.success : profit < 0 ? colors.danger : colors.border;
+                        return (
+                          <>
+                            <View style={{ borderTopWidth: 3, borderTopColor: profitBorder, marginBottom: 6 }} />
+                            <Text variant="caption" tone="muted">Profit</Text>
+                            <RNText style={{ color: profitColor, fontSize: 17, fontWeight: '700' }}>
+                              {formatCurrency(f.profit)}
+                            </RNText>
+                          </>
+                        );
+                      })()}
                     </Card>
                   </View>
                 </View>

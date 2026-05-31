@@ -118,7 +118,7 @@ function InvoiceSwipeActions({
         testID={`invoice-share-pdf-${inv.id}`}
         accessibilityLabel="Share PDF"
         onPress={() => { methods.close(); onSharePdf(); }}
-        style={[s.swipeBtn, { backgroundColor: colors.navy, width: ACTION_BTN_WIDTH }]}
+        style={[s.swipeBtn, { backgroundColor: colors.navySurface, width: ACTION_BTN_WIDTH }]}
       >
         <IconSymbol name={'square.and.arrow.up' as never} size={22} color={colors.inverse} />
       </Pressable>
@@ -262,7 +262,7 @@ export default function InvoicesScreen() {
                     gap: 5,
                   },
                   isActive
-                    ? { backgroundColor: colors.navy, borderColor: colors.navy }
+                    ? { backgroundColor: colors.navySurface, borderColor: colors.navySurface }
                     : { backgroundColor: colors.card, borderColor: colors.border },
                 ]}
                 onPress={() => setFilter(f)}

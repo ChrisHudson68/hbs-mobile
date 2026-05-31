@@ -241,6 +241,7 @@ export default function NewInvoiceScreen() {
             onChangeText={setNotes}
             placeholder="Optional notes for the invoice"
             placeholderTextColor={colors.mutedLight}
+            selectionColor={colors.navy}
             multiline
           />
         </View>

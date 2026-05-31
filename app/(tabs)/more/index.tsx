@@ -56,7 +56,7 @@ function getRoleColorEntry(
   colors: ReturnType<typeof useTheme>['colors']
 ): RoleColorEntry {
   const map: Record<string, RoleColorEntry> = {
-    admin:    { bg: colors.navy,      text: colors.inverse,  badgeTone: 'accent' },
+    admin:    { bg: colors.navySurface, text: colors.inverse,  badgeTone: 'accent' },
     manager:  { bg: colors.yellow,    text: colors.navyDark, badgeTone: 'accent' },
     employee: { bg: colors.successBg, text: colors.success,  badgeTone: 'success' },
     editor:   { bg: colors.infoBg,    text: colors.infoText, badgeTone: 'info' },
@@ -233,7 +233,7 @@ export default function MoreScreen() {
                   <Switch
                     value={biometrics.enabled}
                     onValueChange={() => void handleToggleBiometrics()}
-                    trackColor={{ false: colors.border, true: colors.navy }}
+                    trackColor={{ false: colors.border, true: colors.navySurface }}
                     testID="more-biometrics-toggle"
                   />
                 }
@@ -247,7 +247,7 @@ export default function MoreScreen() {
                 <Switch
                   value={weeklySummaryOn}
                   onValueChange={(v) => void handleToggleWeeklySummary(v)}
-                  trackColor={{ false: colors.border, true: colors.navy }}
+                  trackColor={{ false: colors.border, true: colors.navySurface }}
                   testID="more-weekly-reminder-toggle"
                 />
               }

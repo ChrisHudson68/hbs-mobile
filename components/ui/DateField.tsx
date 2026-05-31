@@ -1,6 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View, ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, useColorScheme, View, ViewStyle } from 'react-native';
 
 import { formatDate, formatDateInputValue } from '../../src/mobile/utils';
 import { useTheme } from '../../src/mobile/theme';
@@ -50,6 +50,7 @@ export function DateField({
   testID,
 }: DateFieldProps) {
   const { colors, spacing, radius } = useTheme();
+  const scheme = useColorScheme();
   const [isOpen, setIsOpen] = useState(false);
 
   const hasError = !!error;
@@ -102,6 +103,8 @@ export function DateField({
           value={value ?? new Date()}
           mode="date"
           display="inline"
+          accentColor={colors.navy}
+          themeVariant={scheme === 'dark' ? 'dark' : 'light'}
           minimumDate={minimumDate}
           maximumDate={maximumDate}
           onChange={(_, d) => {

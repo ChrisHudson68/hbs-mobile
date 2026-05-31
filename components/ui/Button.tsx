@@ -71,9 +71,9 @@ export function Button({
   const variantContainer: Record<ButtonVariant, ViewStyle> = {
     primary: { backgroundColor: colors.yellow },
     secondary: {
-      backgroundColor: 'transparent',
+      backgroundColor: colors.navySurface,
       borderWidth: 1,
-      borderColor: colors.navy,
+      borderColor: colors.navySurface,
     },
     ghost: { backgroundColor: 'transparent' },
     danger: { backgroundColor: colors.danger },
@@ -81,7 +81,7 @@ export function Button({
 
   const variantLabelColor: Record<ButtonVariant, string> = {
     primary: colors.text,
-    secondary: colors.navy,
+    secondary: colors.inverse,
     ghost: colors.navy,
     danger: colors.inverse,
   };

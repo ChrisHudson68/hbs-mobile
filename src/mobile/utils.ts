@@ -65,7 +65,13 @@ export function formatHours(hours: number | null | undefined) {
 }
 
 export function formatCurrency(amount: number | null | undefined) {
-  return `$${Number(amount || 0).toFixed(2)}`;
+  const value = Number(amount || 0);
+  const sign = value < 0 ? '-' : '';
+  const formatted = Math.abs(value).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${sign}$${formatted}`;
 }
 
 export function formatDuration(seconds: number) {

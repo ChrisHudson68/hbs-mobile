@@ -36,6 +36,9 @@ function AppNavigator() {
         headerBlurEffect: 'systemChromeMaterial',
         headerTintColor: colors.navy,
         headerShadowVisible: false,
+        headerStyle: { backgroundColor: colors.bg },
+        headerLargeStyle: { backgroundColor: colors.bg },
+        contentStyle: { backgroundColor: colors.bg },
       }}
     >
       <Stack.Screen name="login" options={{ headerShown: false }} />
@@ -45,7 +48,7 @@ function AppNavigator() {
       <Stack.Screen name="timesheets/manual" options={{ title: 'Add Time Entry', headerBackTitle: 'Timesheets', presentation: 'formSheet' }} />
       <Stack.Screen name="invoices/new" options={{ title: 'New Invoice', headerBackTitle: 'Invoices', presentation: 'formSheet' }} />
       <Stack.Screen name="invoices/[id]" options={{ title: 'Invoice', headerBackTitle: 'Invoices' }} />
-      <Stack.Screen name="employees" options={{ title: 'Employees', headerLargeTitle: true, headerBackTitle: 'More' }} />
+      <Stack.Screen name="employees/index" options={{ title: 'Employees', headerLargeTitle: true, headerBackTitle: 'More' }} />
       <Stack.Screen name="employees/[id]" options={{ title: 'Employee', headerBackTitle: 'Employees' }} />
       <Stack.Screen name="expenses/new" options={{ title: 'New Expense', headerBackTitle: 'More', presentation: 'formSheet' }} />
     </Stack>

@@ -193,7 +193,7 @@ export default function DashboardScreen() {
               style={
                 activeEntry
                   ? {
-                      backgroundColor: colors.navy,
+                      backgroundColor: colors.navySurface,
                       borderRadius: radius.lg,
                       padding: spacing.md,
                       alignItems: 'center',
@@ -268,7 +268,7 @@ export default function DashboardScreen() {
                       <View
                         style={{
                           borderTopWidth: 3,
-                          borderTopColor: colors.navy,
+                          borderTopColor: colors.navySurface,
                           borderTopLeftRadius: radius.md,
                           borderTopRightRadius: radius.md,
                           marginTop: -spacing.sm,

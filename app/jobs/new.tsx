@@ -184,8 +184,8 @@ export default function NewJobScreen() {
                   paddingHorizontal: 14,
                   borderRadius: radius.pill,
                   borderWidth: 1,
-                  backgroundColor: status === opt ? colors.navy : colors.card,
-                  borderColor: status === opt ? colors.navy : colors.border,
+                  backgroundColor: status === opt ? colors.navySurface : colors.card,
+                  borderColor: status === opt ? colors.navySurface : colors.border,
                 }}
               >
                 <Text
@@ -218,6 +218,7 @@ export default function NewJobScreen() {
             onChangeText={setJobDescription}
             placeholder="Describe the work for this job"
             placeholderTextColor={colors.mutedLight}
+            selectionColor={colors.navy}
             multiline
           />
         </View>
@@ -231,7 +232,7 @@ export default function NewJobScreen() {
             <Switch
               value={isOverhead}
               onValueChange={setIsOverhead}
-              trackColor={{ false: colors.border, true: colors.navy }}
+              trackColor={{ false: colors.border, true: colors.navySurface }}
             />
           }
         />

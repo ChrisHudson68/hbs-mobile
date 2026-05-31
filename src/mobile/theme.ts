@@ -27,6 +27,10 @@ export const Colors = {
   cardElevated: '#FFFFFF',
   divider: '#E2E8F2',
   inverse: '#FFFFFF',
+  // Additive (Phase 6) — navy FILL surface (background/track/selected-pill fill).
+  // Light = same as `navy`; dark sibling is a deep recognizable navy (not the
+  // light-blue `navy` dark sibling). White (`inverse`) text sits ON this fill.
+  navySurface: '#1E3A5F',
   // Additive (Phase 2 / 02-01) — Login blueprint backdrop tokens (light skin).
   // grid hairline, radial-wash endpoints. Dark siblings live in DarkColors.
   blueprintGrid: 'rgba(30,58,95,0.05)',
@@ -54,7 +58,7 @@ export const DarkColors = {
   border: '#314E78',
   text: '#FFFFFF',
   muted: '#6E87AB',
-  mutedLight: '#5A6E8F',
+  mutedLight: '#9CB0CE',
   success: '#4ADE80',
   successBg: '#16301F',
   successBorder: '#2F5A3E',
@@ -70,6 +74,9 @@ export const DarkColors = {
   cardElevated: '#1C355C',
   divider: '#314E78',
   inverse: '#0F172A',
+  // Additive (Phase 6) — navy FILL surface sibling: a deep, recognizable navy
+  // (NOT the light-blue `navy` dark sibling). Gives white text good contrast.
+  navySurface: '#24477A',
   blueprintGrid: 'rgba(255,255,255,0.034)',
   blueprintWashTop: '#24477A',
   blueprintWashBottom: '#081120',

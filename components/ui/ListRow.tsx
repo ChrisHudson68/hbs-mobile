@@ -89,7 +89,7 @@ export function ListRow({
         return (
           <Switch
             value={false}
-            trackColor={{ false: colors.border, true: colors.navy }}
+            trackColor={{ false: colors.border, true: colors.navySurface }}
             onValueChange={onPress}
           />
         );

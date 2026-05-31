@@ -209,7 +209,9 @@ export default function NewExpenseScreen() {
 
   return (
     <Screen headerMode="native" scroll keyboardAvoiding>
-      <View style={{ gap: spacing.md, paddingVertical: spacing.md }}>
+      {/* paddingBottom: spacing.xl keeps the Save CTA fully scrollable clear of
+          the formSheet bottom / home indicator (this is the tallest create form). */}
+      <View style={{ gap: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.xl }}>
 
         {/* Job picker trigger */}
         <View style={{ gap: spacing.xs }}>

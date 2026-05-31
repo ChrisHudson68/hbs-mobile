@@ -200,7 +200,7 @@ export default function InvoiceDetailScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
       >
         {/* Navy hero card */}
-        <View style={[s.heroCard, { backgroundColor: colors.navy, borderRadius: radius.lg }]}>
+        <View style={[s.heroCard, { backgroundColor: colors.navySurface, borderRadius: radius.lg }]}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <View style={{ flex: 1, gap: 2 }}>
               <Text variant="title3" tone="inverse" weight="700">
@@ -348,8 +348,8 @@ export default function InvoiceDetailScreen() {
                     s.segBtn,
                     {
                       borderRadius: radius.sm,
-                      borderColor: payMethod === m ? colors.navy : colors.border,
-                      backgroundColor: payMethod === m ? colors.navy : colors.bg,
+                      borderColor: payMethod === m ? colors.navySurface : colors.border,
+                      backgroundColor: payMethod === m ? colors.navySurface : colors.bg,
                     },
                   ]}
                   onPress={() => setPayMethod(m)}

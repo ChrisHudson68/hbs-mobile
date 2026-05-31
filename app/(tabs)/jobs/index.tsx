@@ -161,7 +161,7 @@ export default function JobsScreen() {
                     gap: 5,
                   },
                   isActive
-                    ? { backgroundColor: colors.navy, borderColor: colors.navy }
+                    ? { backgroundColor: colors.navySurface, borderColor: colors.navySurface }
                     : { backgroundColor: colors.card, borderColor: colors.border },
                 ]}
                 onPress={() => setStatusFilter(f)}

@@ -29,19 +29,28 @@ function getInitials(name: string) {
 
 /** Human-readable pay-type label for the Badge. */
 function payTypeLabel(payType: string) {
-  if (payType === 'salary') return 'Salaried';
-  if (payType === 'hourly') return 'Hourly';
+  const normalized = payType?.toLowerCase();
+  if (normalized === 'salary') return 'Salaried';
+  if (normalized === 'hourly') return 'Hourly';
   return payType || 'Pay type unknown';
 }
 
 /** One key/value detail line inside the Card. */
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({
+  label,
+  value,
+  valueMuted = false,
+}: {
+  label: string;
+  value: string;
+  valueMuted?: boolean;
+}) {
   return (
     <View style={s.detailRow}>
       <Text variant="footnote" tone="muted" weight="600">
         {label}
       </Text>
-      <Text variant="subhead" weight="700">
+      <Text variant="subhead" weight="700" tone={valueMuted ? 'muted' : undefined}>
         {value}
       </Text>
     </View>
@@ -110,14 +119,16 @@ export default function EmployeeDetailScreen() {
   }
 
   const isActive = Boolean(employee.active);
-  const payRateValue =
-    employee.payType === 'salary'
-      ? employee.annualSalary != null
-        ? `${formatCurrency(employee.annualSalary)} / yr`
-        : '—'
-      : employee.hourlyRate != null
-        ? `${formatCurrency(employee.hourlyRate)} / hr`
-        : '—';
+  const isSalaried = employee.payType?.toLowerCase() === 'salary';
+  const hasSalary = employee.annualSalary != null && employee.annualSalary > 0;
+  const payRateMuted = isSalaried && !hasSalary;
+  const payRateValue = isSalaried
+    ? hasSalary
+      ? `${formatCurrency(employee.annualSalary as number)} / yr`
+      : 'Salary · rate not set'
+    : employee.hourlyRate != null
+      ? `${formatCurrency(employee.hourlyRate)} / hr`
+      : '—';
 
   return (
     <Screen headerMode="native" padded={false} testID="employee-detail">
@@ -129,7 +140,7 @@ export default function EmployeeDetailScreen() {
         }
       >
         {/* Navy hero card — avatar + name + status/pay-type badges */}
-        <View style={[s.heroCard, { backgroundColor: colors.navy, borderRadius: radius.lg }]}>
+        <View style={[s.heroCard, { backgroundColor: colors.navySurface, borderRadius: radius.lg }]}>
           <View
             style={[
               s.avatar,
@@ -157,8 +168,8 @@ export default function EmployeeDetailScreen() {
         <SectionHeader title="Compensation" />
         <Card elevation="sm" padding="md" radius="md">
           <DetailRow label="Pay Type" value={payTypeLabel(employee.payType)} />
-          <DetailRow label="Pay Rate" value={payRateValue} />
-          {employee.payType === 'salary' && employee.hourlyRate != null ? (
+          <DetailRow label="Pay Rate" value={payRateValue} valueMuted={payRateMuted} />
+          {isSalaried && employee.hourlyRate != null ? (
             <DetailRow label="Hourly Rate" value={`${formatCurrency(employee.hourlyRate)} / hr`} />
           ) : null}
         </Card>
