@@ -1,22 +1,23 @@
 import { ReactNode } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+  KeyboardAwareScrollView,
+  KeyboardToolbar,
+} from 'react-native-keyboard-controller';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 
 import { useTheme } from '../../src/mobile/theme';
 
 type ScreenBackground = 'bg' | 'card';
 
+// [TUNABLE] gap kept between the focused field's caret and the keyboard top.
+const KEYBOARD_BOTTOM_OFFSET = 24;
+
 /**
  * Header reconciliation mode:
  * - `'none'` (default): today's behavior — SafeAreaView applies the top edge.
  * - `'native'`: a native-stack header owns the top inset, so the top edge is
- *   dropped and the ScrollView uses `contentInsetAdjustmentBehavior="automatic"`
+ *   dropped and the scroll view uses `contentInsetAdjustmentBehavior="automatic"`
  *   for glitch-free large-title collapse (react-native-screens #2822/#2871).
  *   Opt-in for Phase-4/5 native-header screens; inert until a screen sets it.
  */
@@ -28,7 +29,14 @@ type ScreenProps = {
   padded?: boolean;
   /** Wraps children in a ScrollView. */
   scroll?: boolean;
-  /** Adds a KeyboardAvoidingView (iOS `padding` behavior). */
+  /**
+   * Keyboard-aware scroll container: the content glides in sync with the
+   * keyboard (react-native-keyboard-controller) and a Done/Prev/Next toolbar is
+   * shown above keyboards with no return key (decimal-pad money/hours fields).
+   * Implies a scroll container. A Done/Prev/Next toolbar (KeyboardToolbar) is
+   * shown above the keyboard so decimal-pad fields (no return key) can be
+   * dismissed and adjacent fields navigated via the up/down arrows.
+   */
   keyboardAvoiding?: boolean;
   /** Surface fill — maps to colors.bg / colors.card. */
   background?: ScreenBackground;
@@ -62,6 +70,31 @@ export function Screen({
   const isNativeHeader = headerMode === 'native';
   const edges: Edge[] = isNativeHeader ? ['left', 'right'] : ['top'];
 
+  // keyboardAvoiding → a single KeyboardAwareScrollView that reads the live
+  // keyboard frame off the UI thread and glides the focused field into view.
+  // Replaces the old KeyboardAvoidingView(padding) + ScrollView
+  // automaticallyAdjustKeyboardInsets combo, which double-adjusted and left
+  // fields clipped behind the keyboard inside formSheets. The KeyboardToolbar
+  // floats a Done/Prev/Next bar above keyboards (the decimal-pad fields have no
+  // return key). Lives under the app-root <KeyboardProvider> (app/_layout.tsx).
+  if (keyboardAvoiding) {
+    return (
+      <SafeAreaView edges={edges} style={[s.flex, { backgroundColor }]} testID={testID}>
+        <KeyboardAwareScrollView
+          style={s.flex}
+          contentContainerStyle={[s.scrollContent, contentPadding]}
+          keyboardShouldPersistTaps="handled"
+          contentInsetAdjustmentBehavior={isNativeHeader ? 'automatic' : 'never'}
+          bottomOffset={KEYBOARD_BOTTOM_OFFSET}
+          showsVerticalScrollIndicator={false}
+        >
+          {children}
+        </KeyboardAwareScrollView>
+        <KeyboardToolbar />
+      </SafeAreaView>
+    );
+  }
+
   const inner = scroll ? (
     <ScrollView
       style={s.flex}
@@ -76,20 +109,9 @@ export function Screen({
     <View style={[s.flex, contentPadding]}>{children}</View>
   );
 
-  const body = keyboardAvoiding ? (
-    <KeyboardAvoidingView
-      style={s.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      {inner}
-    </KeyboardAvoidingView>
-  ) : (
-    inner
-  );
-
   return (
     <SafeAreaView edges={edges} style={[s.flex, { backgroundColor }]} testID={testID}>
-      {body}
+      {inner}
     </SafeAreaView>
   );
 }

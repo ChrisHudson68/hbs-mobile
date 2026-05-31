@@ -1,0 +1,23 @@
+# W1 regression check: gorhom record-payment sheet still works with the new
+# root KeyboardProvider. Opens the sheet and focuses its (gorhom-handled)
+# decimal-pad Amount field.
+appId: com.hbs.mobile
+---
+- runFlow: login.yaml
+- tapOn:
+    point: "70%,95%"
+- waitForAnimationToEnd
+- tapOn:
+    id: "invoice-row-.*"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "invoice-pdf-share-button"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    id: "invoice-record-payment-button"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-pay-open

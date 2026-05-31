@@ -2,6 +2,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { ThemeProvider } from '../src/mobile/context/ThemeProvider';
 import { AuthProvider, useAuth } from '../src/mobile/context/AuthContext';
 import { AppStateProvider } from '../src/mobile/context/AppStateContext';
@@ -58,6 +59,7 @@ function AppNavigator() {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+    <KeyboardProvider>
     <ThemeProvider>
     <AuthProvider>
       <AppStateProvider>
@@ -67,6 +69,7 @@ export default function RootLayout() {
       </AppStateProvider>
     </AuthProvider>
     </ThemeProvider>
+    </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

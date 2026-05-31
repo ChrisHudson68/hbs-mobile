@@ -1,0 +1,108 @@
+# W1 keyboard-fix proof (manager). Focuses the at-risk decimal-pad fields
+# (Amount / Hours — no return key) and screenshots with the keyboard UP: the
+# field must stay visible above the keyboard and the Done toolbar must show.
+# Also opens the gorhom record-payment sheet to confirm KeyboardProvider didn't
+# break it. Between sections we relaunchApp (stays logged in via keychain) to
+# reset to the dashboard cleanly instead of dismissing formSheets. Creds via -e.
+appId: com.hbs.mobile
+---
+- runFlow: login.yaml
+
+# === New Expense formSheet — focus decimal-pad Amount ===
+- tapOn:
+    point: "90%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "more-profile-card"
+    timeout: 12000
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%,51%"
+- extendedWaitUntil:
+    visible:
+      id: "newexpense-amount-input"
+    timeout: 12000
+- waitForAnimationToEnd
+- tapOn:
+    id: "newexpense-amount-input"
+- inputText: "123.45"
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-exp-amount
+
+# === relaunch → dashboard (still logged in) ===
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "dashboard-clock-card"
+    timeout: 20000
+
+# === New Invoice formSheet — focus decimal-pad Amount ===
+- tapOn:
+    point: "70%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "invoices-new-button"
+    timeout: 12000
+- tapOn:
+    id: "invoices-new-button"
+- extendedWaitUntil:
+    visible:
+      id: "newinvoice-amount-input"
+    timeout: 12000
+- waitForAnimationToEnd
+- tapOn:
+    id: "newinvoice-amount-input"
+- inputText: "2500"
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-inv-amount
+
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "dashboard-clock-card"
+    timeout: 20000
+
+# === Manual Time Entry formSheet — focus decimal-pad Hours ===
+- tapOn:
+    point: "50%,95%"
+- waitForAnimationToEnd
+- tapOn:
+    id: "timesheets-add-entry-button"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "manualtime-hours-input"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    id: "manualtime-hours-input"
+    optional: true
+- inputText: "7.5"
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-time-hours
+
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "dashboard-clock-card"
+    timeout: 20000
+
+# === gorhom record-payment sheet — regression check (untouched in W1) ===
+- tapOn:
+    point: "70%,95%"
+- waitForAnimationToEnd
+- tapOn:
+    id: "invoice-row-.*"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "invoice-pdf-share-button"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    id: "invoice-record-payment-button"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-pay-sheet
