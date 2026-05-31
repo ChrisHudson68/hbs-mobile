@@ -1,0 +1,62 @@
+# Re-shoot the 3 gap screens (manager only): Employees list, Employee detail
+# (the 404-fix screen), New Expense formSheet. Quick-action rows are tapped by
+# POINT (text taps missed in the tour). Geometry from the More screenshot:
+# Manual Time Entry ~46%, Add Expense ~53%, Employees ~59% (y).
+appId: com.hbs.mobile
+---
+- runFlow: login.yaml
+- tapOn:
+    point: "90%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "more-profile-card"
+    timeout: 12000
+- waitForAnimationToEnd
+# Employees roster (quick-action row ~59%)
+- tapOn:
+    point: "50%,59%"
+- extendedWaitUntil:
+    visible:
+      id: "employees-search-input"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-09-employees
+# First employee row → detail
+- tapOn:
+    point: "50%,30%"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "employee-detail"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-10-employeedetail
+# Back to More
+- tapOn:
+    text: "Employees"
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    text: "More"
+    optional: true
+- waitForAnimationToEnd
+# Add Expense (quick-action row ~53%)
+- tapOn:
+    point: "90%,95%"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "more-profile-card"
+    timeout: 12000
+    optional: true
+- tapOn:
+    point: "50%,53%"
+- extendedWaitUntil:
+    visible:
+      id: "newexpense-amount-input"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-17-newexpense

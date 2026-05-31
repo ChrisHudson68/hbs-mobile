@@ -1,0 +1,105 @@
+# Manager-only WRITE-FORM tour — the 4 formSheet create screens + their inline
+# DateField pickers (to capture the date-picker accent color, finding C1).
+# formSheet dismiss = swipe down from the top. Appearance set externally.
+# PREFIX + SHOTDIR + manager creds via -e.
+appId: com.hbs.mobile
+---
+- runFlow: login.yaml
+
+# 11 — New Job (formSheet)
+- tapOn:
+    point: "30%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "jobs-new-button"
+    timeout: 12000
+- tapOn:
+    id: "jobs-new-button"
+- extendedWaitUntil:
+    visible:
+      id: "newjob-name-input"
+    timeout: 12000
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-11-newjob
+# 12 — New Job inline date picker
+- tapOn:
+    id: "newjob-startdate-picker"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-12-newjob-datepicker
+- swipe:
+    start: "50%,6%"
+    end: "50%,92%"
+- waitForAnimationToEnd
+
+# 13 — New Invoice (formSheet)
+- tapOn:
+    point: "70%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "invoices-new-button"
+    timeout: 12000
+- tapOn:
+    id: "invoices-new-button"
+- extendedWaitUntil:
+    visible:
+      id: "newinvoice-amount-input"
+    timeout: 12000
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-13-newinvoice
+# 14 — New Invoice inline date picker
+- tapOn:
+    id: "newinvoice-dateissued-picker"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-14-newinvoice-datepicker
+- swipe:
+    start: "50%,6%"
+    end: "50%,92%"
+- waitForAnimationToEnd
+
+# 15 — Manual Time Entry (formSheet)
+- tapOn:
+    point: "50%,95%"
+- waitForAnimationToEnd
+- tapOn:
+    id: "timesheets-add-entry-button"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "manualtime-hours-input"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-15-manualtime
+# 16 — Manual Time inline date picker
+- tapOn:
+    id: "manualtime-date-picker"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-16-manualtime-datepicker
+- swipe:
+    start: "50%,6%"
+    end: "50%,92%"
+- waitForAnimationToEnd
+
+# 17 — New Expense (formSheet) — entry from More screen
+- tapOn:
+    point: "90%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "more-profile-card"
+    timeout: 12000
+- tapOn:
+    text: "New Expense"
+    optional: true
+- tapOn:
+    text: "Add Expense"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "newexpense-amount-input"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-17-newexpense

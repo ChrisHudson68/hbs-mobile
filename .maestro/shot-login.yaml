@@ -1,0 +1,13 @@
+# Screenshot the Login screen (pre-auth, role-independent). Appearance is set
+# externally via `xcrun simctl ui booted appearance light|dark` before the run.
+# PREFIX + SHOTDIR passed via -e. Creds vars unused here (no login performed).
+appId: com.hbs.mobile
+---
+- clearKeychain
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "login-subdomain-input"
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-00-login

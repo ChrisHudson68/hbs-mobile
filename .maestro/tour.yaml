@@ -1,0 +1,117 @@
+# Full visual TOUR of shared screens — runs for BOTH manager and employee.
+# Manager-only steps (record-payment, Employees) are optional:true so the same
+# flow degrades cleanly on the employee account. Appearance (light/dark) is set
+# externally via simctl before each run. PREFIX + SHOTDIR + creds via -e.
+# Tab order: Dashboard(10%) Jobs(30%) Timesheets(50%) Invoices(70%) More(90%) @ y95%.
+# Pushed-screen back = header back-button text; formSheets not visited here.
+appId: com.hbs.mobile
+---
+- runFlow: login.yaml
+
+# 01 — Dashboard
+- extendedWaitUntil:
+    visible:
+      id: "dashboard-clock-card"
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-01-dashboard
+
+# 02 — Jobs list
+- tapOn:
+    point: "30%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "jobs-search-input"
+    timeout: 12000
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-02-jobs
+
+# 03 — Job detail (pushed)
+- tapOn:
+    id: "jobs-card-.*"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "jobdetail-hero"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-03-jobdetail
+- tapOn:
+    text: "Jobs"
+    optional: true
+- waitForAnimationToEnd
+
+# 04 — Timesheets
+- tapOn:
+    point: "50%,95%"
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-04-timesheets
+
+# 05 — Invoices list
+- tapOn:
+    point: "70%,95%"
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-05-invoices
+
+# 06 — Invoice detail (pushed)
+- tapOn:
+    id: "invoice-row-.*"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "invoice-pdf-share-button"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-06-invoicedetail
+
+# 07 — Record-Payment sheet (manager only; gorhom bottom sheet)
+- tapOn:
+    id: "invoice-record-payment-button"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-07-recordpayment
+- swipe:
+    start: "50%,25%"
+    end: "50%,92%"
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    text: "Invoices"
+    optional: true
+- waitForAnimationToEnd
+
+# 08 — More
+- tapOn:
+    point: "90%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "more-profile-card"
+    timeout: 12000
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-08-more
+
+# 09 — Employees list (manager only)
+- tapOn:
+    text: "Employees"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "employees-search-input"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-09-employees
+
+# 10 — Employee detail (the 404-fix screen; manager only)
+- tapOn:
+    point: "50%,32%"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "employee-detail"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-10-employeedetail
