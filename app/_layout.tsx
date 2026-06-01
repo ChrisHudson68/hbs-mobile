@@ -1,6 +1,7 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
+import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
@@ -61,7 +62,11 @@ function RootRedirect() {
     }
   }, [isAuthenticated, isLoading, segments, router]);
 
-  return null;
+  // Zero-size sync marker for Maestro: once it exists in the tree, AuthContext has
+  // finished hydrating, so flows can `assertVisible: id: auth-loaded` instead of
+  // racing the splash. pointerEvents none → never intercepts touches.
+  if (isLoading) return null;
+  return <View testID="auth-loaded" style={{ width: 0, height: 0 }} pointerEvents="none" />;
 }
 
 function AppNavigator() {
