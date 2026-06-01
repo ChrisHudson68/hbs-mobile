@@ -280,7 +280,7 @@ export default function InvoiceDetailScreen() {
 
         {canManage && balance > 0 && (
           <Button
-            variant="secondary"
+            variant="primary"
             size="md"
             fullWidth
             label="+ Record Payment"

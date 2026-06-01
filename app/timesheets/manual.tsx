@@ -206,7 +206,14 @@ export default function ManualTimeEntryScreen() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 8, flexDirection: 'row', paddingVertical: 2 }}
+              contentContainerStyle={{
+                gap: 8,
+                flexDirection: 'row',
+                paddingVertical: 2,
+                // Right-edge inset so the last chip never sits flush to the edge —
+                // a small peek that signals the row is horizontally scrollable.
+                paddingRight: spacing.xl,
+              }}
               style={{ marginTop: 4 }}
             >
               {activeEmployees.map((emp) => {
@@ -242,22 +249,50 @@ export default function ManualTimeEntryScreen() {
           )}
         </View>
 
-        {/* ---- Job (required) — tap-to-open picker ---- */}
-        <View style={{ gap: 4 }}>
-          {jobError ? (
-            <Text variant="footnote" tone="danger">
-              {jobError}
-            </Text>
-          ) : null}
-          <ListRow
-            title="Job"
-            subtitle={selectedJob?.jobName ?? 'Tap to select'}
-            trailing="chevron"
+        {/* ---- Job (required) — tap-to-open picker, styled to mirror Input/DateField ---- */}
+        <View style={{ gap: spacing.xs }}>
+          <Text variant="footnote" tone="muted">
+            Job
+          </Text>
+          <Pressable
             onPress={() => {
               setJobPickerOpen(true);
             }}
+            accessibilityRole="button"
+            accessibilityLabel="Job"
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              minHeight: 44,
+              backgroundColor: colors.card,
+              borderColor: jobError ? colors.danger : colors.border,
+              borderWidth: jobError ? 2 : 1,
+              borderRadius: radius.sm,
+              paddingHorizontal: spacing.md,
+              paddingVertical: spacing.sm,
+              gap: spacing.sm,
+            }}
             testID="manualtime-job-picker"
-          />
+          >
+            <Text
+              variant="body"
+              tone={selectedJob ? 'default' : 'muted'}
+              numberOfLines={1}
+              style={{ flex: 1 }}
+            >
+              {selectedJob?.jobName ?? 'Tap to select'}
+            </Text>
+            <IconSymbol
+              name={'chevron.right' as never}
+              size={16}
+              color={colors.mutedLight}
+            />
+          </Pressable>
+          {jobError ? (
+            <Text variant="footnote" tone="danger" numberOfLines={1}>
+              {jobError}
+            </Text>
+          ) : null}
         </View>
 
         {/* ---- Date (required) — DateField (no free text) ---- */}

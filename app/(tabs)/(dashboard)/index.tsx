@@ -301,7 +301,7 @@ export default function DashboardScreen() {
                       <RNText style={{ fontSize: 10, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.4 }}>
                         Total Profit
                       </RNText>
-                      <RNText style={{ fontSize: 16, fontWeight: '900', color: colors.text, marginTop: 4, letterSpacing: -0.5 }}>
+                      <RNText style={{ fontSize: 16, fontWeight: '900', color: metrics.totalProfit < 0 ? colors.danger : colors.text, marginTop: 4, letterSpacing: -0.5 }}>
                         {formatCurrency(metrics.totalProfit)}
                       </RNText>
                     </Card>
@@ -334,7 +334,7 @@ export default function DashboardScreen() {
                       <View
                         style={{
                           borderTopWidth: 3,
-                          borderTopColor: unpaidTotal > 0 ? colors.danger : colors.border,
+                          borderTopColor: unpaidTotal > 0 ? colors.navy : colors.border,
                           borderTopLeftRadius: radius.md,
                           borderTopRightRadius: radius.md,
                           marginTop: -spacing.sm,
@@ -349,7 +349,7 @@ export default function DashboardScreen() {
                         style={{
                           fontSize: 16,
                           fontWeight: '900',
-                          color: unpaidTotal > 0 ? colors.danger : colors.text,
+                          color: colors.navy,
                           marginTop: 4,
                           letterSpacing: -0.5,
                         }}

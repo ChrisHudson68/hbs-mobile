@@ -230,7 +230,7 @@ export default function InvoicesScreen() {
             borderWidth: 1,
             borderColor: colors.warningBorder,
           }}>
-            <RNText style={{ color: colors.warning, fontWeight: '700', fontSize: 13 }}>
+            <RNText style={{ color: colors.navy, fontWeight: '700', fontSize: 13 }}>
               Open balance: {formatCurrency(unpaidTotal)}
             </RNText>
           </View>
@@ -354,9 +354,7 @@ export default function InvoicesScreen() {
                       color: overdue ? colors.danger : colors.muted,
                       marginTop: 2,
                     }}>
-                      {overdue
-                        ? `Issued ${formatDate(inv.dateIssued)} · ⚠ Overdue`
-                        : `Issued ${formatDate(inv.dateIssued)} · Due ${formatDate(inv.dueDate)}`}
+                      {`Issued ${formatDate(inv.dateIssued)} · Due ${formatDate(inv.dueDate)}`}
                     </RNText>
                   </View>
 
@@ -371,6 +369,14 @@ export default function InvoicesScreen() {
                       tone={statusTone(inv.status ?? '')}
                       label={inv.status ?? 'Unknown'}
                     />
+                    {overdue && (
+                      <Badge
+                        tone="danger"
+                        size="sm"
+                        label="Overdue"
+                        testID={`invoice-overdue-pill-${inv.id}`}
+                      />
+                    )}
                   </View>
                 </View>
 

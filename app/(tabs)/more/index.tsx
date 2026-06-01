@@ -19,7 +19,6 @@ import { useTheme } from '../../../src/mobile/theme';
 import { isManagerOrAdmin } from '../../../src/mobile/utils';
 
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ListRow } from '@/components/ui/ListRow';
 import { Screen } from '@/components/ui/Screen';
@@ -151,9 +150,9 @@ export default function MoreScreen() {
                 tone={roleEntry.badgeTone}
                 label={user?.role?.toUpperCase() ?? 'USER'}
               />
-              <Text variant="footnote" tone="muted" numberOfLines={1}>{user?.email}</Text>
+              <Text variant="footnote" tone="default" numberOfLines={1}>{user?.email}</Text>
               {tenantSubdomain ? (
-                <Text variant="caption" tone="muted" numberOfLines={1}>
+                <Text variant="caption" tone="default" numberOfLines={1}>
                   {tenantSubdomain}.hudson-business-solutions.com
                 </Text>
               ) : null}
@@ -256,16 +255,29 @@ export default function MoreScreen() {
         </View>
 
         {/* ---------------------------------------------------------------- */}
-        {/* Sign Out — kit danger Button; handleLogout Alert.alert unchanged  */}
+        {/* Sign Out — quiet destructive: red text on card fill + thin red    */}
+        {/* outline (a minor exit, not a danger primary). handleLogout         */}
+        {/* Alert.alert unchanged.                                            */}
         {/* ---------------------------------------------------------------- */}
-        <Button
-          variant="danger"
-          size="lg"
-          fullWidth
-          label="Sign Out"
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Sign Out"
           onPress={handleLogout}
           testID="more-signout-button"
-        />
+          style={({ pressed }) => [
+            s.signOut,
+            {
+              borderRadius: radius.md,
+              borderColor: colors.danger,
+              backgroundColor: colors.card,
+              opacity: pressed ? 0.85 : 1,
+            },
+          ]}
+        >
+          <RNText style={{ color: colors.danger, fontSize: 17, fontWeight: '600' }}>
+            Sign Out
+          </RNText>
+        </Pressable>
 
         {/* ---------------------------------------------------------------- */}
         {/* Version footer                                                    */}
@@ -308,5 +320,14 @@ const s = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  signOut: {
+    width: '100%',
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    borderWidth: 1,
   },
 });

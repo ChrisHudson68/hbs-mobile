@@ -497,7 +497,11 @@ export default function JobDetailScreen() {
                     <Card elevation="sm" padding="sm" radius="md">
                       {(() => {
                         const profit = Number(f.profit);
-                        const profitColor = profit > 0 ? colors.success : profit < 0 ? colors.danger : colors.muted;
+                        // Zero profit renders like every other stat tile (navy/dark
+                        // text + neutral border) — only true positive/negative profit
+                        // earns success-green / danger-red. Singling out $0.00 in muted
+                        // gray made it read as disabled next to the other $0.00 tiles.
+                        const profitColor = profit > 0 ? colors.success : profit < 0 ? colors.danger : colors.text;
                         const profitBorder = profit > 0 ? colors.success : profit < 0 ? colors.danger : colors.border;
                         return (
                           <>

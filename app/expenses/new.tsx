@@ -26,6 +26,15 @@ import { Text } from '@/components/ui/Text';
 
 const CATEGORIES = ['Materials', 'Equipment', 'Subcontractor', 'Fuel', 'Tools', 'Other'];
 
+// Serialise a Date to a YYYY-MM-DD string in LOCAL time (unlike toISOString(),
+// which is UTC and would roll the day forward in timezones behind UTC).
+function toLocalDateInput(d: Date) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export default function NewExpenseScreen() {
   const router = useRouter();
   const navigation = useNavigation();
@@ -45,7 +54,9 @@ export default function NewExpenseScreen() {
   // Stored as a YYYY-MM-DD string so the protected uploadAsset path (which sets it
   // from the parsed receiptDate string) and the API call stay unchanged. DateField
   // consumes a derived Date and writes back the serialised string.
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  // Default to TODAY in LOCAL time. toISOString() is UTC, so late in the day in
+  // timezones behind UTC it rolls forward and the field would default to tomorrow.
+  const [date, setDate] = useState(toLocalDateInput(new Date()));
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
   const [receiptFilename, setReceiptFilename] = useState<string | null>(null);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
@@ -312,16 +323,21 @@ export default function NewExpenseScreen() {
           testID="newexpense-date-picker"
         />
 
-        {/* Primary CTA — scrolls above the keyboard with the form */}
-        <Button
-          variant="primary"
-          size="lg"
-          fullWidth
-          label="Save Expense"
-          loading={saving}
-          onPress={() => void handleSave()}
-          testID="newexpense-save-button"
-        />
+        {/* Primary CTA — scrolls above the keyboard with the form. Extra top
+            margin (on top of the parent gap) detaches the yellow button from the
+            Date field above so it never reads as a bar fused to the field / the
+            keyboard accessory toolbar. */}
+        <View style={{ marginTop: spacing.sm }}>
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
+            label="Save Expense"
+            loading={saving}
+            onPress={() => void handleSave()}
+            testID="newexpense-save-button"
+          />
+        </View>
       </View>
 
       {/* ── Sheets — siblings at root level, NEVER inside ScrollView ── */}

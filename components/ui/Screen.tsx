@@ -6,7 +6,7 @@ import {
 } from 'react-native-keyboard-controller';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 
-import { useTheme } from '../../src/mobile/theme';
+import { Colors, DarkColors, useTheme } from '../../src/mobile/theme';
 
 type ScreenBackground = 'bg' | 'card';
 
@@ -90,7 +90,7 @@ export function Screen({
         >
           {children}
         </KeyboardAwareScrollView>
-        <KeyboardToolbar />
+        <KeyboardToolbar theme={KEYBOARD_TOOLBAR_THEME} />
       </SafeAreaView>
     );
   }
@@ -115,6 +115,25 @@ export function Screen({
     </SafeAreaView>
   );
 }
+
+// Brand-tint the keyboard accessory toolbar (Done + prev/next chevrons). The
+// library default `primary` is iOS system-blue (#007AFF) — explicitly off-brand.
+// Module-scope constant: stable identity, never rebuilt per render. Both skins
+// are supplied (the toolbar picks by OS appearance independent of useTheme()).
+const KEYBOARD_TOOLBAR_THEME = {
+  light: {
+    primary: Colors.navy,
+    disabled: Colors.mutedLight,
+    background: Colors.card,
+    ripple: 'rgba(30,58,95,0.12)',
+  },
+  dark: {
+    primary: DarkColors.navy,
+    disabled: DarkColors.mutedLight,
+    background: DarkColors.card,
+    ripple: 'rgba(110,146,198,0.18)',
+  },
+} as const;
 
 const s = StyleSheet.create({
   flex: { flex: 1 },

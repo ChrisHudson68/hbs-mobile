@@ -34,6 +34,18 @@ function statusTone(status: string | null): 'success' | 'warning' | 'neutral' {
   return 'neutral';
 }
 
+/**
+ * Display-only label for a raw API status string. Normalizes the underlying
+ * value (e.g. `active`, `on_hold`, `on hold`) to one title-cased treatment so
+ * every card's status pill reads uniformly. Does NOT mutate the stored value.
+ */
+function statusLabel(status: string | null): string {
+  if (isOnHoldStatus(status)) return 'On Hold';
+  if (isCompletedStatus(status)) return 'Completed';
+  if (isCancelledStatus(status)) return 'Cancelled';
+  return 'Active';
+}
+
 function matchesFilter(job: JobListItem, filter: StatusFilter): boolean {
   if (filter === 'all') return true;
   if (filter === 'active') return isActiveStatus(job.status);
@@ -240,7 +252,7 @@ export default function JobsScreen() {
                   </View>
                   <Badge
                     tone={statusTone(job.status)}
-                    label={job.status ?? 'Active'}
+                    label={statusLabel(job.status)}
                   />
                 </View>
 
@@ -251,7 +263,10 @@ export default function JobsScreen() {
                   </View>
                 ) : null}
 
-                {/* Financials row — manager-gated */}
+                {/* Financials row — manager-gated.
+                 * Fixed 3-column equal-width grid (each cell flex:1) so the
+                 * Profit / Hours / Unpaid labels + values line up vertically
+                 * down the list regardless of value length. */}
                 {job.financials && canManage ? (
                   <View
                     style={[
@@ -261,7 +276,6 @@ export default function JobsScreen() {
                         paddingTop: 6,
                         borderTopWidth: 0.5,
                         borderTopColor: colors.border,
-                        gap: spacing.md,
                       },
                     ]}
                   >
@@ -289,22 +303,20 @@ export default function JobsScreen() {
                       </RNText>
                     </View>
 
-                    {/* Unpaid invoices */}
-                    {Number(job.financials.unpaidInvoices) > 0 ? (
-                      <View style={s.finItem}>
-                        <RNText style={{ fontSize: 12, color: colors.muted }}>Unpaid</RNText>
-                        <RNText style={{ fontSize: 12, fontWeight: '600', color: colors.danger }}>
+                    {/* Unpaid invoices — navy, not red (red is reserved for
+                     * negative profit / overdue, matching the dashboard). */}
+                    <View style={s.finItem}>
+                      <RNText style={{ fontSize: 12, color: colors.muted }}>Unpaid</RNText>
+                      {Number(job.financials.unpaidInvoices) > 0 ? (
+                        <RNText style={{ fontSize: 12, fontWeight: '600', color: colors.navy }}>
                           {formatCurrency(job.financials.unpaidInvoices)}
                         </RNText>
-                      </View>
-                    ) : (
-                      <View style={s.finItem}>
-                        <RNText style={{ fontSize: 12, color: colors.muted }}>Unpaid</RNText>
+                      ) : (
                         <RNText style={{ fontSize: 12, fontWeight: '600', color: colors.muted }}>
                           —
                         </RNText>
-                      </View>
-                    )}
+                      )}
+                    </View>
                   </View>
                 ) : null}
               </Card>
@@ -353,6 +365,7 @@ const s = StyleSheet.create({
   skeletonContainer: {},
   chip: {},
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  financials: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
-  finItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  // 3-column equal-width grid for the per-card stat row.
+  financials: { flexDirection: 'row', alignItems: 'flex-start' },
+  finItem: { flex: 1, gap: 2 },
 });

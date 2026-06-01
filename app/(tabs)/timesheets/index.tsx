@@ -6,6 +6,7 @@ import {
   ActivityIndicator, Alert, LayoutAnimation, Pressable, RefreshControl,
   ScrollView, StyleSheet, Text as RNText, View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { interpolate, useAnimatedStyle, Extrapolation } from 'react-native-reanimated';
 import type { SharedValue } from 'react-native-reanimated';
 import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
@@ -61,6 +62,14 @@ function approvalTone(status: string | null): 'success' | 'danger' | 'warning' {
   if (status === 'approved') return 'success';
   if (status === 'rejected') return 'danger';
   return 'warning';
+}
+
+// Display-only: "DJ Manning" → "DJ M." so the Viewing chips never truncate.
+function shortEmployeeName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name.trim();
+  const last = parts[parts.length - 1];
+  return `${parts.slice(0, -1).join(' ')} ${last.charAt(0).toUpperCase()}.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -671,49 +680,66 @@ export default function TimesheetsScreen() {
         {canManage && employees.length > 0 && (
           <Card elevation="sm" padding="md" radius="lg">
             <Text variant="footnote" tone="muted">Viewing</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: spacing.sm, flexDirection: 'row', paddingVertical: 2, paddingRight: spacing.md }}
-            >
-              <Pressable
-                style={[s.chip, {
-                  paddingVertical: 6, paddingHorizontal: 14,
-                  borderRadius: radius.pill, borderWidth: 1, minHeight: 44,
-                  justifyContent: 'center', alignItems: 'center',
-                },
-                !selectedEmployeeId
-                  ? { backgroundColor: colors.navySurface, borderColor: colors.navySurface }
-                  : { backgroundColor: colors.card, borderColor: colors.border },
-                ]}
-                onPress={() => setSelectedEmployeeId(null)}
+            {/* Relative wrapper so the right-edge fade can hint "more employees ↦" */}
+            <View style={{ position: 'relative' }}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: spacing.sm, flexDirection: 'row', paddingVertical: 2, paddingRight: spacing.lg }}
               >
-                <RNText style={{ fontSize: 13, fontWeight: '600',
-                  color: !selectedEmployeeId ? colors.inverse : colors.muted }}>
-                  My Sheet
-                </RNText>
-              </Pressable>
-              {employees.map(emp => (
                 <Pressable
-                  key={emp.id}
                   style={[s.chip, {
                     paddingVertical: 6, paddingHorizontal: 14,
                     borderRadius: radius.pill, borderWidth: 1, minHeight: 44,
                     justifyContent: 'center', alignItems: 'center',
                   },
-                  selectedEmployeeId === emp.id
+                  !selectedEmployeeId
                     ? { backgroundColor: colors.navySurface, borderColor: colors.navySurface }
                     : { backgroundColor: colors.card, borderColor: colors.border },
                   ]}
-                  onPress={() => setSelectedEmployeeId(emp.id)}
+                  onPress={() => setSelectedEmployeeId(null)}
                 >
-                  <RNText style={{ fontSize: 13, fontWeight: '600',
-                    color: selectedEmployeeId === emp.id ? colors.inverse : colors.muted }}>
-                    {emp.name}
+                  <RNText
+                    numberOfLines={1}
+                    style={{ fontSize: 13, fontWeight: '600',
+                      color: !selectedEmployeeId ? colors.inverse : colors.muted }}
+                  >
+                    My Sheet
                   </RNText>
                 </Pressable>
-              ))}
-            </ScrollView>
+                {employees.map(emp => (
+                  <Pressable
+                    key={emp.id}
+                    style={[s.chip, {
+                      paddingVertical: 6, paddingHorizontal: 14,
+                      borderRadius: radius.pill, borderWidth: 1, minHeight: 44,
+                      justifyContent: 'center', alignItems: 'center',
+                    },
+                    selectedEmployeeId === emp.id
+                      ? { backgroundColor: colors.navySurface, borderColor: colors.navySurface }
+                      : { backgroundColor: colors.card, borderColor: colors.border },
+                    ]}
+                    onPress={() => setSelectedEmployeeId(emp.id)}
+                  >
+                    <RNText
+                      numberOfLines={1}
+                      style={{ fontSize: 13, fontWeight: '600',
+                        color: selectedEmployeeId === emp.id ? colors.inverse : colors.muted }}
+                    >
+                      {shortEmployeeName(emp.name)}
+                    </RNText>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              {/* Peek/fade affordance — pinned to the right edge, fades into the card */}
+              <LinearGradient
+                pointerEvents="none"
+                colors={['transparent', colors.card]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={s.scrollFade}
+              />
+            </View>
           </Card>
         )}
 
@@ -821,13 +847,18 @@ export default function TimesheetsScreen() {
             </>
           ) : canApprove && weekEntries.length > 0 ? (
             <Pressable
-              style={[s.summaryCard, { backgroundColor: colors.card, borderRadius: radius.md, borderTopColor: colors.navySurface, justifyContent: 'center' }]}
+              style={({ pressed }) => [s.actionTile, {
+                backgroundColor: colors.navySurface, borderRadius: radius.md,
+                opacity: pressed ? 0.85 : 1,
+              }]}
               onPress={() => void handleApproveWeek()}
               disabled={approveLoading}
+              accessibilityRole="button"
+              accessibilityLabel="Approve Week"
             >
               {approveLoading
-                ? <ActivityIndicator size="small" color={colors.navy} />
-                : <RNText style={{ fontSize: 12, fontWeight: '700', color: colors.navy }}>Approve Week</RNText>
+                ? <ActivityIndicator size="small" color={colors.inverse} />
+                : <RNText style={{ fontSize: 13, fontWeight: '700', color: colors.inverse }}>Approve Week</RNText>
               }
             </Pressable>
           ) : null}
@@ -1110,6 +1141,13 @@ export default function TimesheetsScreen() {
 const s = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   chip: {},
+  scrollFade: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 28,
+  },
   summaryCard: {
     flex: 1,
     padding: 14,
@@ -1117,6 +1155,14 @@ const s = StyleSheet.create({
     borderTopWidth: 3,
     alignItems: 'center',
     gap: 4,
+  },
+  // Filled CTA tile — same footprint as summaryCard but solid fill + no
+  // bordered-pill accent, so an action never reads as a read-only stat.
+  actionTile: {
+    flex: 1,
+    padding: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   swipeBtn: {
     width: SWIPE_BUTTON_WIDTH,
