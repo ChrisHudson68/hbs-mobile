@@ -57,7 +57,13 @@ export function formatDate(value: string | null | undefined) {
 }
 
 export function formatDateInputValue(date: Date) {
-  return date.toISOString().slice(0, 10);
+  // LOCAL date components — NOT toISOString() (UTC), which rolls the day forward
+  // in timezones behind UTC (e.g. US evening → tomorrow), mis-dating defaults
+  // and picked dates. Build YYYY-MM-DD from the local calendar day.
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export function formatHours(hours: number | null | undefined) {
@@ -256,10 +262,40 @@ export function errorMessageFromCode(error?: string) {
       return 'That job is no longer valid. Refresh jobs and try again.';
     case 'job_not_found':
       return 'That job could not be found.';
+    case 'job_required':
+      return 'Select a job before clocking in.';
     case 'receipt_required':
       return 'Please select a receipt image before uploading.';
     case 'unauthorized':
+    case 'bearer_token_required':
       return 'Your session is no longer valid. Please sign in again.';
+    case 'forbidden':
+      return "You don't have permission to do that.";
+    case 'too_many_attempts':
+      return 'Too many attempts. Please wait a minute and try again.';
+    case 'week_approved':
+      return 'That week is already approved and locked.';
+    case 'not_approved':
+      return 'That entry has not been approved yet.';
+    case 'already_pending':
+      return 'There is already a pending request for this.';
+    case 'invalid_hours':
+      return 'Enter a valid number of hours.';
+    case 'reason_required':
+      return 'Please provide a reason.';
+    case 'reason_too_long':
+      return 'That reason is too long. Please shorten it.';
+    case 'email_and_password_required':
+      return 'Enter your email and password.';
+    case 'not_linked_to_employee':
+      return 'Your user is not linked to an employee record yet.';
+    case 'employee_not_found':
+      return 'That employee could not be found.';
+    case 'invalid_params':
+      return 'Some details are missing or invalid. Check the form and try again.';
+    case 'invalid_id':
+    case 'not_found':
+      return 'That item could not be found.';
     default:
       return error ? `Request failed: ${error}` : 'Something went wrong. Please try again.';
   }

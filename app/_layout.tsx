@@ -7,6 +7,7 @@ import { ThemeProvider } from '../src/mobile/context/ThemeProvider';
 import { AuthProvider, useAuth } from '../src/mobile/context/AuthContext';
 import { AppStateProvider } from '../src/mobile/context/AppStateContext';
 import { useTheme } from '../src/mobile/theme';
+import { AppErrorBoundary } from '../components/ui/AppErrorBoundary';
 
 function RootRedirect() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -19,7 +20,10 @@ function RootRedirect() {
     if (!isAuthenticated && !inAuthGroup) {
       router.replace('/login');
     } else if (isAuthenticated && inAuthGroup) {
-      router.replace('/(tabs)');
+      // '/' is the app index → resolves through (tabs)/(dashboard) to the
+      // Dashboard tab (same destination as the old '/(tabs)', but the bare group
+      // isn't a typed leaf since the index is nested in the (dashboard) group).
+      router.replace('/');
     }
   }, [isAuthenticated, isLoading, segments, router]);
 
@@ -59,6 +63,7 @@ function AppNavigator() {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+    <AppErrorBoundary>
     <KeyboardProvider>
     <ThemeProvider>
     <AuthProvider>
@@ -70,6 +75,7 @@ export default function RootLayout() {
     </AuthProvider>
     </ThemeProvider>
     </KeyboardProvider>
+    </AppErrorBoundary>
     </GestureHandlerRootView>
   );
 }

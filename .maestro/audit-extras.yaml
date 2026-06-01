@@ -1,0 +1,79 @@
+# Audit gap-filler: screens the tour/forms flows miss (More quick-actions need
+# POINT taps, not text-match). Plus a key interaction state (edit-time-entry
+# sheet). Role creds + SHOTDIR + PREFIX via -e. Nav optional for resilience.
+appId: com.hbs.mobile
+---
+- runFlow: login.yaml
+
+# ---- More → Employees (point tap) ----
+- tapOn:
+    point: "90%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "more-profile-card"
+    timeout: 12000
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%,63%"
+- extendedWaitUntil:
+    visible:
+      id: "employees-search-input"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-x1-employees
+# employee detail (first row)
+- tapOn:
+    point: "50%,30%"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "employee-detail"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-x2-employeedetail
+
+# ---- More → Add Expense (point tap) + keyboard up ----
+- tapOn:
+    text: "More"
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    point: "90%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "more-profile-card"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%,55%"
+- extendedWaitUntil:
+    visible:
+      id: "newexpense-amount-input"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-x3-newexpense
+- tapOn:
+    id: "newexpense-amount-input"
+    optional: true
+- inputText: "250"
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-x4-newexpense-kbup
+- swipe:
+    start: "50%,6%"
+    end: "50%,92%"
+- waitForAnimationToEnd
+
+# ---- Timesheets → edit-time-entry sheet (tap an entry) ----
+- tapOn:
+    point: "50%,95%"
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-x5-timesheets-list
+- tapOn:
+    id: "timeentry-row-.*"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-x6-editentry-sheet

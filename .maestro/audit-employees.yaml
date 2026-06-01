@@ -1,0 +1,32 @@
+# Reliable Employees roster + employee-detail capture (More-row needs a POINT
+# tap; correct center from view hierarchy = 50%,59%). Role creds + SHOTDIR +
+# PREFIX via -e.
+appId: com.hbs.mobile
+---
+- runFlow: login.yaml
+- tapOn:
+    point: "90%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "more-profile-card"
+    timeout: 12000
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%,59%"
+- extendedWaitUntil:
+    visible:
+      id: "employees-search-input"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-x1-employees
+- tapOn:
+    point: "50%,30%"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "employee-detail"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-x2-employeedetail
