@@ -871,3 +871,6 @@ const s = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: 32, gap: 8 },
   swipeBtn: { width: SWIPE_BUTTON_WIDTH, alignItems: 'center', justifyContent: 'center' },
 });
+
+// Per-route crash boundary — scopes a render error to this screen (Expo Router).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/ui/AppErrorBoundary';

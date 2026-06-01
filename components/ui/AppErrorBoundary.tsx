@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import RNErrorBoundary from 'react-native-error-boundary';
+import type { ErrorBoundaryProps } from 'expo-router';
 
 import { Colors, Radius, Spacing } from '../../src/mobile/theme';
 
@@ -67,6 +68,24 @@ export function AppErrorBoundary({ children }: { children: ReactNode }) {
     >
       {children}
     </RNErrorBoundary>
+  );
+}
+
+/**
+ * Per-route crash boundary for Expo Router. Re-export as `ErrorBoundary` from any
+ * data-fetching screen file (`export { RouteErrorBoundary as ErrorBoundary } from ...`)
+ * and Expo Router scopes a thrown render error to THAT route — the tab bar / nav
+ * chrome survive and `retry` re-renders just the screen. Do NOT navigate (router.replace)
+ * from here; `retry` is the recovery path (react19-domain.md).
+ */
+export function RouteErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <ErrorFallbackView
+      error={error}
+      onRetry={retry}
+      title="Couldn't load this screen"
+      subtitle="We hit a snag loading this. Tap retry — your data is safe."
+    />
   );
 }
 

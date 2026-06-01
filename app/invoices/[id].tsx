@@ -403,3 +403,6 @@ const s = StyleSheet.create({
   segmented: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
   segBtn: { paddingVertical: 6, paddingHorizontal: 10, borderWidth: 1 },
 });
+
+// Per-route crash boundary — scopes a render error to this screen (Expo Router).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/ui/AppErrorBoundary';

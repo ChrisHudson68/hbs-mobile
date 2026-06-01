@@ -1170,3 +1170,6 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+
+// Per-route crash boundary — scopes a render error to this screen (Expo Router).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/ui/AppErrorBoundary';
