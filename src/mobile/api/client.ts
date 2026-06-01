@@ -98,11 +98,37 @@ function safeStringify(value: unknown) {
   }
 }
 
+// Keys whose values must never reach the device console (console.log is NOT stripped
+// in Release). Redacted in every logged request body. GPS coords are redacted too —
+// raw location must not be logged (privacy rule).
+const SENSITIVE_BODY_KEYS = ['password', 'token', 'lat', 'lng'];
+
+export function redactSensitive(jsonString: string): string {
+  try {
+    const parsed = JSON.parse(jsonString);
+    if (parsed && typeof parsed === 'object') {
+      let touched = false;
+      const safe: Record<string, unknown> = { ...parsed };
+      for (const key of SENSITIVE_BODY_KEYS) {
+        if (key in safe && safe[key] != null) {
+          safe[key] = '[redacted]';
+          touched = true;
+        }
+      }
+      if (touched) return JSON.stringify(safe);
+    }
+  } catch {
+    // not JSON — fall through to the raw (already non-credential) string
+  }
+  return jsonString;
+}
+
 function summarizeBody(body: RequestInit['body']) {
   if (!body) return undefined;
 
   if (typeof body === 'string') {
-    return body.length > 500 ? `${body.slice(0, 500)}...[truncated]` : body;
+    const redacted = redactSensitive(body);
+    return redacted.length > 500 ? `${redacted.slice(0, 500)}...[truncated]` : redacted;
   }
 
   if (body instanceof FormData) {

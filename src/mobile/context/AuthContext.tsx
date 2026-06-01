@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { mobileLogin, mobileLogout } from '../api/client';
+import { clearQueue } from '../hooks/useOfflineQueue';
 import { STORAGE_KEYS } from '../constants';
 import type { User } from '../types';
 
@@ -152,6 +153,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       SecureStore.deleteItemAsync(STORAGE_KEYS.tenant),
       SecureStore.deleteItemAsync(STORAGE_KEYS.token),
       SecureStore.deleteItemAsync(STORAGE_KEYS.user),
+      // Purge any queued offline punches so they can't replay under the next user
+      // (full state purge on logout / tenant switch).
+      clearQueue(),
     ]);
     setToken(null);
     setUser(null);
