@@ -25,6 +25,39 @@ import {
     UploadReceiptResponse,
 } from '../types';
 import { errorMessageFromCode, parseJsonResponse } from '../utils';
+import type { ZodType } from 'zod';
+import {
+  ClockInJobsResponseSchema,
+  ClockOutResponseSchema,
+  EditRequestsResponseSchema,
+  EmployeesResponseSchema,
+  InvoiceDetailResponseSchema,
+  InvoicesResponseSchema,
+  JobDetailResponseSchema,
+  JobExpenseListSchema,
+  JobIncomeListSchema,
+  JobsResponseSchema,
+  JobTimeEntryListSchema,
+  LoginResponseSchema,
+  TimesheetsResponseSchema,
+} from './schemas';
+
+/**
+ * Runtime-validate a well-formed SUCCESS response against its contract schema.
+ * On mismatch: log the first issues for diagnosis and throw a friendly Error
+ * (caught by the root/route error boundaries) so a screen never indexes into a
+ * malformed body. `.loose()` schemas keep unknown server fields, so this only
+ * fires on a genuinely wrong shape — never on harmless additions.
+ */
+function validateResponse<T>(schema: ZodType | undefined, data: unknown, method: string, path: string): T {
+  if (!schema) return data as T;
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    console.error(`[API SCHEMA] ${method} ${path} response failed validation`, JSON.stringify(result.error.issues?.slice(0, 5)));
+    throw new Error('We received unexpected data from the server. Please try again.');
+  }
+  return result.data as T;
+}
 
 type ApiClientOptions = {
   tenantSubdomain: string;
@@ -120,7 +153,7 @@ export function createApiClient({
   token,
   onUnauthorized,
 }: ApiClientOptions) {
-  async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  async function request<T>(path: string, options?: RequestInit, schema?: ZodType): Promise<T> {
     const method = options?.method || 'GET';
     const startedAt = Date.now();
 
@@ -173,22 +206,22 @@ export function createApiClient({
       throw new Error(message);
     }
 
-    return data as T;
+    return validateResponse<T>(schema, data, method, path);
   }
 
   return {
     request,
 
     getJobs() {
-      return request<JobsResponse>('/api/jobs');
+      return request<JobsResponse>('/api/jobs', undefined, JobsResponseSchema);
     },
 
     getJobDetail(jobId: number) {
-      return request<JobDetailResponse>(`/api/jobs/${jobId}`);
+      return request<JobDetailResponse>(`/api/jobs/${jobId}`, undefined, JobDetailResponseSchema);
     },
 
     getClockInJobs() {
-      return request<ClockInJobsResponse>('/api/timesheets/clock-in-jobs');
+      return request<ClockInJobsResponse>('/api/timesheets/clock-in-jobs', undefined, ClockInJobsResponseSchema);
     },
 
     getTimesheets(params?: { employeeId?: number; start?: string }) {
@@ -196,7 +229,7 @@ export function createApiClient({
       if (params?.employeeId) qs.set('employeeId', String(params.employeeId));
       if (params?.start) qs.set('start', params.start);
       const query = qs.toString();
-      return request<TimesheetsResponse>(`/api/timesheets${query ? `?${query}` : ''}`);
+      return request<TimesheetsResponse>(`/api/timesheets${query ? `?${query}` : ''}`, undefined, TimesheetsResponseSchema);
     },
 
     clockIn(args: ClockInArgs) {
@@ -218,7 +251,7 @@ export function createApiClient({
       return request<ClockOutResponse>('/api/timesheets/clock-out', {
         method: 'POST',
         body: JSON.stringify({ note: note ?? null }),
-      });
+      }, ClockOutResponseSchema);
     },
 
     uploadReceipt(formData: FormData) {
@@ -257,7 +290,7 @@ export function createApiClient({
     },
 
     getJobIncome(jobId: number) {
-      return request<{ ok: boolean; income: JobIncome[] }>(`/api/jobs/${jobId}/income`);
+      return request<{ ok: boolean; income: JobIncome[] }>(`/api/jobs/${jobId}/income`, undefined, JobIncomeListSchema);
     },
 
     addJobIncome(jobId: number, args: AddIncomeArgs) {
@@ -281,11 +314,11 @@ export function createApiClient({
     },
 
     getInvoices() {
-      return request<{ ok: boolean; invoices: Invoice[] }>('/api/invoices');
+      return request<{ ok: boolean; invoices: Invoice[] }>('/api/invoices', undefined, InvoicesResponseSchema);
     },
 
     getInvoice(invoiceId: number) {
-      return request<{ ok: boolean; invoice: InvoiceDetail }>(`/api/invoices/${invoiceId}`);
+      return request<{ ok: boolean; invoice: InvoiceDetail }>(`/api/invoices/${invoiceId}`, undefined, InvoiceDetailResponseSchema);
     },
 
     createInvoice(args: CreateInvoiceArgs) {
@@ -303,11 +336,11 @@ export function createApiClient({
     },
 
     getEmployees() {
-      return request<{ ok: boolean; employees: Employee[] }>('/api/employees');
+      return request<{ ok: boolean; employees: Employee[] }>('/api/employees', undefined, EmployeesResponseSchema);
     },
 
     getJobExpenses(jobId: number) {
-      return request<{ ok: boolean; expenses: JobExpense[] }>(`/api/jobs/${jobId}/expenses`);
+      return request<{ ok: boolean; expenses: JobExpense[] }>(`/api/jobs/${jobId}/expenses`, undefined, JobExpenseListSchema);
     },
 
     editExpense(expenseId: number, args: { category: string; vendor?: string; amount: number; date: string }) {
@@ -322,7 +355,7 @@ export function createApiClient({
     },
 
     getJobTimeEntries(jobId: number) {
-      return request<{ ok: boolean; entries: JobTimeEntry[] }>(`/api/jobs/${jobId}/time-entries`);
+      return request<{ ok: boolean; entries: JobTimeEntry[] }>(`/api/jobs/${jobId}/time-entries`, undefined, JobTimeEntryListSchema);
     },
 
     deleteTimeEntry(entryId: number) {
@@ -358,7 +391,7 @@ export function createApiClient({
     },
 
     getTimesheetEditRequests() {
-      return request<{ ok: boolean; requests: TimesheetEditRequest[] }>('/api/timesheets/edit-requests');
+      return request<{ ok: boolean; requests: TimesheetEditRequest[] }>('/api/timesheets/edit-requests', undefined, EditRequestsResponseSchema);
     },
 
     approveEditRequest(requestId: number) {
@@ -410,7 +443,7 @@ export async function mobileLogin({
     throw new Error(message);
   }
 
-  return data as LoginResponse;
+  return validateResponse<LoginResponse>(LoginResponseSchema, data, method, path);
 }
 
 export async function mobileLogout({

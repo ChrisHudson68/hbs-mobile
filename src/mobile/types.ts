@@ -28,6 +28,8 @@ export type JobListItem = {
   status: string | null;
   isOverhead?: boolean;
   description?: string | null;
+  /** Long-form job description (real backend field — kills the `(job as any)` casts, drift D1). */
+  jobDescription?: string | null;
   sourceEstimateId?: number | null;
   sourceEstimateCustomerName?: string | null;
   financials?: {
@@ -197,8 +199,6 @@ export type DashboardMetrics = {
   totalHours: number;
   averageProfitPerJob: number;
 };
-
-export type AppTab = 'dashboard' | 'jobs' | 'timesheets' | 'expenses';
 
 export type Invoice = {
   id: number;

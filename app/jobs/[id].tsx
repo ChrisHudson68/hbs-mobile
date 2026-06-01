@@ -550,14 +550,14 @@ export default function JobDetailScreen() {
             ) : !canManage ? (
               <Card elevation="sm" padding="md" radius="md">
                 <Text variant="subhead" tone="muted">
-                  {(job as any).jobDescription ?? 'No description available.'}
+                  {job.jobDescription ?? 'No description available.'}
                 </Text>
               </Card>
             ) : null}
-            {canManage && (job as any).jobDescription ? (
+            {canManage && job.jobDescription ? (
               <Card elevation="sm" padding="md" radius="md">
                 <Text variant="footnote" weight="700" tone="muted">Description</Text>
-                <Text variant="body">{(job as any).jobDescription}</Text>
+                <Text variant="body">{job.jobDescription}</Text>
               </Card>
             ) : null}
           </>

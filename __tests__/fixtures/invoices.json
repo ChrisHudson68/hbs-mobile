@@ -1,0 +1,89 @@
+{
+  "ok": true,
+  "invoices": [
+    {
+      "id": 28,
+      "jobId": 38,
+      "jobName": "Lakeside Deck & Patio",
+      "clientName": "Karen & Mark Sullivan",
+      "invoiceNumber": "INV-1006",
+      "dateIssued": "2026-05-20",
+      "dueDate": "2026-06-19",
+      "amount": 18750,
+      "status": "Unpaid",
+      "notes": "Full contract — deck & patio.",
+      "totalPaid": 0,
+      "balance": 18750
+    },
+    {
+      "id": 24,
+      "jobId": 35,
+      "jobName": "Riverside Office Renovation",
+      "clientName": "Hudson Commercial Properties LLC",
+      "invoiceNumber": "INV-1002",
+      "dateIssued": "2026-05-15",
+      "dueDate": "2026-06-14",
+      "amount": 42000,
+      "status": "Unpaid",
+      "notes": "Progress billing #2 — framing & rough-in.",
+      "totalPaid": 0,
+      "balance": 42000
+    },
+    {
+      "id": 26,
+      "jobId": 37,
+      "jobName": "Downtown Retail Build-Out",
+      "clientName": "Beacon Retail Group",
+      "invoiceNumber": "INV-1004",
+      "dateIssued": "2026-05-01",
+      "dueDate": "2026-05-31",
+      "amount": 78000,
+      "status": "Unpaid",
+      "notes": "Milestone 1 — shell & HVAC.",
+      "totalPaid": 0,
+      "balance": 78000
+    },
+    {
+      "id": 25,
+      "jobId": 36,
+      "jobName": "Maple Street Kitchen Remodel",
+      "clientName": "Thompson Residential",
+      "invoiceNumber": "INV-1003",
+      "dateIssued": "2026-04-05",
+      "dueDate": "2026-05-05",
+      "amount": 16000,
+      "status": "Partial",
+      "notes": "Deposit + cabinetry.",
+      "totalPaid": 8000,
+      "balance": 8000
+    },
+    {
+      "id": 2,
+      "jobId": 2,
+      "jobName": "test",
+      "clientName": "test",
+      "invoiceNumber": "INV-1001",
+      "dateIssued": "2026-03-18",
+      "dueDate": "2026-03-18",
+      "amount": 1234,
+      "status": "Paid",
+      "notes": null,
+      "totalPaid": 1234,
+      "balance": 0
+    },
+    {
+      "id": 27,
+      "jobId": 39,
+      "jobName": "Industrial Warehouse Roofing",
+      "clientName": "Atlas Logistics Inc.",
+      "invoiceNumber": "INV-1005",
+      "dateIssued": "2026-02-01",
+      "dueDate": "2026-03-03",
+      "amount": 210000,
+      "status": "Paid",
+      "notes": "Final invoice — re-roof complete.",
+      "totalPaid": 210000,
+      "balance": 0
+    }
+  ]
+}

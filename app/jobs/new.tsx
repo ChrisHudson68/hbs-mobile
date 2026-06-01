@@ -48,7 +48,7 @@ export default function NewJobScreen() {
         setClientName(j.clientName ?? '');
         setStatus(j.status ?? 'Active');
         setIsOverhead(j.isOverhead ?? false);
-        setJobDescription((j as any).jobDescription ?? '');
+        setJobDescription(j.jobDescription ?? '');
       } catch { /* ignore */ }
       finally { setLoadingEdit(false); }
     })();

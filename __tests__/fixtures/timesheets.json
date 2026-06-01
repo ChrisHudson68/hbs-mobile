@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "scope": {
+    "employeeId": 47,
+    "start": "2026-06-01",
+    "end": "2026-06-07",
+    "isEmployeeUser": false,
+    "canApproveTime": true,
+    "canUseSelfClock": true
+  },
+  "summary": {
+    "entryCount": 0,
+    "totalHours": 0,
+    "weekApproved": false,
+    "approvedAt": null,
+    "approvedByName": null
+  },
+  "activeClockEntry": null,
+  "timesheets": []
+}
