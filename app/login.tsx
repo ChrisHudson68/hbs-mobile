@@ -18,7 +18,7 @@ const YBAR_WIDTH = 48;
 const YBAR_HEIGHT = 5;
 
 export default function LoginScreen() {
-  const { login } = useAuth();
+  const { login, unlockWithBiometrics, hasLockedSession } = useAuth();
   const biometrics = useBiometrics();
   const { colors, spacing, radius, elevation } = useTheme();
   const insets = useSafeAreaInsets();
@@ -35,14 +35,15 @@ export default function LoginScreen() {
   const [emailError, setEmailError] = useState<string | undefined>();
   const [passwordError, setPasswordError] = useState<string | undefined>();
 
-  // Auto-prompt biometrics on mount if enabled. PRESERVED from the original screen:
-  // handleBiometricLogin stays INERT (Phase 7 owns the real fix); useBiometrics
-  // wiring is unchanged.
+  // A saved session locked behind biometrics → offer/auto-prompt the unlock.
+  const canUseBiometricUnlock = biometrics.available && biometrics.enabled && hasLockedSession;
+
+  // Auto-prompt the biometric unlock once when a locked session is waiting.
   useEffect(() => {
-    if (!biometrics.available || !biometrics.enabled) return;
+    if (!canUseBiometricUnlock) return;
     void handleBiometricLogin();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [biometrics.available, biometrics.enabled]);
+  }, [canUseBiometricUnlock]);
 
   const handleLogin = async () => {
     const cleanSubdomain = subdomain.trim().toLowerCase();
@@ -75,12 +76,13 @@ export default function LoginScreen() {
     }
   };
 
-  // INERT biometric handler — preserved no-op-on-result behavior (Phase 7 fix).
+  // Real biometric unlock: reads the keychain-gated token (OS prompts Face ID/Touch ID)
+  // and restores the session. On failure the password form stays available — never a dead end.
   const handleBiometricLogin = async () => {
     try {
-      await biometrics.authenticate();
+      await unlockWithBiometrics();
     } catch {
-      // Biometric failed silently — password remains available.
+      // Cancelled/failed — password remains available.
     }
   };
 
@@ -185,15 +187,17 @@ export default function LoginScreen() {
               />
             </View>
 
-            <Button
-              variant="secondary"
-              size="lg"
-              fullWidth
-              label="Use Face ID"
-              leftIcon="faceid"
-              onPress={() => void handleBiometricLogin()}
-              testID="login-biometric-button"
-            />
+            {canUseBiometricUnlock ? (
+              <Button
+                variant="secondary"
+                size="lg"
+                fullWidth
+                label={`Use ${biometrics.biometricType ?? 'Face ID'}`}
+                leftIcon="faceid"
+                onPress={() => void handleBiometricLogin()}
+                testID="login-biometric-button"
+              />
+            ) : null}
 
             <Button
               variant="ghost"
