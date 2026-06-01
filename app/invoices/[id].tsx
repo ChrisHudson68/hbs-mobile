@@ -219,6 +219,9 @@ export default function InvoiceDetailScreen() {
                 testID="invoice-pdf-share-button"
                 onPress={() => void handleSharePdf()}
                 disabled={pdfLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Download invoice PDF"
+                accessibilityState={{ disabled: pdfLoading, busy: pdfLoading }}
                 style={[s.pdfBtn, { borderColor: 'rgba(255,255,255,0.35)', borderRadius: radius.sm }]}
               >
                 {pdfLoading ? (

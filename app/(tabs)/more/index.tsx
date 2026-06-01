@@ -190,7 +190,11 @@ export default function MoreScreen() {
             {isClockedIn ? 'Currently Clocked In' : 'Not Clocked In'}
           </RNText>
           {isClockedIn && (
-            <Pressable onPress={() => router.push('/(tabs)/timesheets')}>
+            <Pressable
+              onPress={() => router.push('/(tabs)/timesheets')}
+              accessibilityRole="button"
+              accessibilityLabel="View timesheet"
+            >
               <RNText style={{ color: colors.infoText, fontSize: 13, fontWeight: '700' }}>
                 View →
               </RNText>

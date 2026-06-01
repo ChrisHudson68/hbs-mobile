@@ -9,6 +9,7 @@ import {
 import Animated, {
   cancelAnimation,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSpring,
   withTiming,
@@ -55,6 +56,7 @@ export function PressableScale({
   hitSlop,
   testID,
 }: PressableScaleProps) {
+  const reduced = useReducedMotion();
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
 
@@ -75,18 +77,21 @@ export function PressableScale({
   function handlePressIn() {
     if (disabled) return;
     if (haptic) hapticSelection();
-    scale.set(
-      withTiming(scaleTo, {
-        duration: Motion.fast.duration,
-        easing: motionEasing(Motion.fast.easing),
-      }),
-    );
+    // Reduced motion: keep the opacity dim feedback, drop the scale movement.
+    if (!reduced) {
+      scale.set(
+        withTiming(scaleTo, {
+          duration: Motion.fast.duration,
+          easing: motionEasing(Motion.fast.easing),
+        }),
+      );
+    }
     opacity.set(withTiming(PRESS_OPACITY, { duration: Motion.fast.duration }));
   }
 
   function handlePressOut() {
     if (disabled) return;
-    scale.set(withSpring(1, Spring.snappy));
+    if (!reduced) scale.set(withSpring(1, Spring.snappy));
     opacity.set(withTiming(1, { duration: Motion.fast.duration }));
   }
 
