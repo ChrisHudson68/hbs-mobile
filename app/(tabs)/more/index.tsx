@@ -215,6 +215,7 @@ export default function MoreScreen() {
                 subtitle={item.sub}
                 trailing="chevron"
                 onPress={() => router.push(item.path as any)}
+                testID={`more-row-${item.path.replace(/[^a-z]+/gi, '-').replace(/^-|-$/g, '')}`}
               />
             ))}
           </Card>

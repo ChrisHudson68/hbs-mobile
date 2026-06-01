@@ -1,0 +1,19 @@
+# Live verification: More -> Employees navigates + roster renders (triage of pressure-test C1).
+appId: com.hbs.mobile
+---
+- runFlow: login.yaml
+- tapOn:
+    point: "90%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "more-profile-card"
+    timeout: 12000
+- tapOn:
+    id: "more-row-employees"
+- extendedWaitUntil:
+    visible:
+      id: "employees-search-input"
+    timeout: 12000
+- takeScreenshot: /tmp/verify-employees
+- assertVisible:
+    id: "employees-search-input"
