@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Pressable, RefreshControl,
   ScrollView, Share, StyleSheet, Text as RNText, View,
@@ -7,6 +8,7 @@ import {
 import * as ContextMenu from 'zeego/context-menu';
 import * as Haptics from 'expo-haptics';
 import { useApi } from '../../../src/mobile/hooks/useApi';
+import { tenantKey } from '../../../src/mobile/query/queryClient';
 import { useTheme } from '../../../src/mobile/theme';
 import type { JobListItem } from '../../../src/mobile/types';
 import {
@@ -71,25 +73,20 @@ const FILTER_TEST_IDS: Record<StatusFilter, string> = {
 export default function JobsScreen() {
   const api = useApi();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, tenantSubdomain } = useAuth();
   const { colors, spacing, radius } = useTheme();
-  const [jobs, setJobs] = useState<JobListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
   const canManage = isManagerOrAdmin(user);
 
-  const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true); else setLoading(true);
-    try {
-      const res = await api.getJobs();
-      setJobs(res.jobs ?? []);
-    } catch { /* ignore */ }
-    finally { if (isRefresh) setRefreshing(false); else setLoading(false); }
-  }, [api]);
-
-  useEffect(() => { void load(); }, [load]);
+  // TanStack Query: tenant-scoped key (no tenant-A→B cache bleed), persisted to disk
+  // for instant reopen, auto-refetch on reconnect/foreground. A fetch/validation error
+  // surfaces as query state (cached/stale data stays visible), not a crash.
+  const { data, isLoading: loading, isRefetching: refreshing, refetch } = useQuery({
+    queryKey: tenantKey(tenantSubdomain, 'jobs'),
+    queryFn: () => api.getJobs(),
+  });
+  const jobs: JobListItem[] = data?.jobs ?? [];
 
   const filtered = jobs.filter(j =>
     matchesFilter(j, statusFilter) &&
@@ -131,7 +128,7 @@ export default function JobsScreen() {
             refreshing={refreshing}
             onRefresh={() => {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              void load(true);
+              void refetch();
             }}
           />
         }

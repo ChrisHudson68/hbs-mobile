@@ -1,13 +1,47 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { ThemeProvider } from '../src/mobile/context/ThemeProvider';
 import { AuthProvider, useAuth } from '../src/mobile/context/AuthContext';
 import { AppStateProvider } from '../src/mobile/context/AppStateContext';
 import { useTheme } from '../src/mobile/theme';
 import { AppErrorBoundary } from '../components/ui/AppErrorBoundary';
+import {
+  asyncStoragePersister,
+  purgeQueryCache,
+  queryClient,
+  setupOnlineManager,
+  subscribeAppStateFocus,
+} from '../src/mobile/query/queryClient';
+
+/**
+ * Wires TanStack Query's online/focus managers and PURGES the query cache the moment
+ * the session ends (logout / tenant switch) so no tenant data survives in memory or on
+ * disk. Lives inside AuthProvider + the query provider.
+ */
+function QueryManagers() {
+  const { isAuthenticated } = useAuth();
+  const wasAuthenticated = useRef(false);
+
+  useEffect(() => {
+    setupOnlineManager();
+    const offFocus = subscribeAppStateFocus();
+    return () => { offFocus(); };
+  }, []);
+
+  useEffect(() => {
+    // Only purge on a real authed→unauthed transition (not the initial boot state).
+    if (wasAuthenticated.current && !isAuthenticated) {
+      void purgeQueryCache();
+    }
+    wasAuthenticated.current = isAuthenticated;
+  }, [isAuthenticated]);
+
+  return null;
+}
 
 function RootRedirect() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -64,10 +98,12 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <AppErrorBoundary>
+    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister: asyncStoragePersister }}>
     <KeyboardProvider>
     <ThemeProvider>
     <AuthProvider>
       <AppStateProvider>
+      <QueryManagers />
       <RootRedirect />
       <AppNavigator />
       <StatusBar style="auto" />
@@ -75,6 +111,7 @@ export default function RootLayout() {
     </AuthProvider>
     </ThemeProvider>
     </KeyboardProvider>
+    </PersistQueryClientProvider>
     </AppErrorBoundary>
     </GestureHandlerRootView>
   );

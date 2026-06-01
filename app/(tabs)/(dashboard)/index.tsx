@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Pressable,
   RefreshControl,
@@ -16,6 +17,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useAuth } from '../../../src/mobile/context/AuthContext';
 import { useApi } from '../../../src/mobile/hooks/useApi';
+import { tenantKey } from '../../../src/mobile/query/queryClient';
 import { Motion, useTheme } from '../../../src/mobile/theme';
 import { motionEasing } from '../../../src/mobile/utils/motionEasing';
 import type { Invoice, JobListItem, TimesheetsResponse } from '../../../src/mobile/types';
@@ -37,38 +39,44 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { SkeletonBlock } from '@/components/ui/SkeletonBlock';
 
 export default function DashboardScreen() {
-  const { user } = useAuth();
+  const { user, tenantSubdomain } = useAuth();
   const api = useApi();
   const router = useRouter();
   const { colors, spacing, radius } = useTheme();
   const { width: screenWidth } = useWindowDimensions();
 
-  const [jobs, setJobs] = useState<JobListItem[]>([]);
   const [jobSearch, setJobSearch] = useState('');
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [timesheetData, setTimesheetData] = useState<TimesheetsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
   const canManage = isManagerOrAdmin(user);
 
-  const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true); else setLoading(true);
-    try {
-      const [jobsRes, tsRes, invRes] = await Promise.all([
-        api.getJobs().catch(() => null),
-        api.getTimesheets().catch(() => null),
-        canManage ? api.getInvoices().catch(() => null) : Promise.resolve(null),
-      ]);
-      if (jobsRes?.jobs) setJobs(jobsRes.jobs);
-      if (tsRes) setTimesheetData(tsRes);
-      if (invRes?.invoices) setInvoices(invRes.invoices);
-    } catch { /* ignore */ }
-    finally { if (isRefresh) setRefreshing(false); else setLoading(false); }
-  }, [api, canManage]);
+  // TanStack Query — tenant-scoped keys SHARED with the Jobs/Invoices list screens
+  // (deduped, persisted, refetch on reconnect/foreground). A failed fetch degrades to
+  // empty/stale here (no thrown boundary on the dashboard tab), matching prior behavior.
+  const jobsQuery = useQuery({
+    queryKey: tenantKey(tenantSubdomain, 'jobs'),
+    queryFn: () => api.getJobs(),
+  });
+  const timesheetsQuery = useQuery({
+    queryKey: tenantKey(tenantSubdomain, 'timesheets'),
+    queryFn: () => api.getTimesheets(),
+  });
+  const invoicesQuery = useQuery({
+    queryKey: tenantKey(tenantSubdomain, 'invoices'),
+    queryFn: () => api.getInvoices(),
+    enabled: canManage,
+  });
 
-  useEffect(() => { void load(); }, [load]);
+  const jobs: JobListItem[] = jobsQuery.data?.jobs ?? [];
+  const timesheetData: TimesheetsResponse | null = timesheetsQuery.data ?? null;
+  const invoices: Invoice[] = invoicesQuery.data?.invoices ?? [];
+  const loading = jobsQuery.isLoading || timesheetsQuery.isLoading || (canManage && invoicesQuery.isLoading);
+  const refreshing = jobsQuery.isRefetching || timesheetsQuery.isRefetching || invoicesQuery.isRefetching;
+  const refetchAll = () => {
+    void jobsQuery.refetch();
+    void timesheetsQuery.refetch();
+    if (canManage) void invoicesQuery.refetch();
+  };
 
   useEffect(() => {
     const entry = timesheetData?.activeClockEntry;
@@ -148,7 +156,7 @@ export default function DashboardScreen() {
       <ScrollView
         contentContainerStyle={{ padding: spacing.md, gap: spacing.md, paddingBottom: 32 }}
         contentInsetAdjustmentBehavior="automatic"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refetchAll} />}
       >
         {/* Role subtitle — large title owns the greeting */}
         <Text variant="caption" tone="muted">{user?.role}</Text>

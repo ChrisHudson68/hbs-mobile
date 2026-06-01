@@ -1,6 +1,7 @@
 import { useNavigation, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Pressable, RefreshControl,
   ScrollView, StyleSheet, Text as RNText, View,
@@ -9,6 +10,7 @@ import Animated, { Extrapolation, interpolate, useAnimatedStyle } from 'react-na
 import type { SharedValue } from 'react-native-reanimated';
 import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { useApi } from '../../../src/mobile/hooks/useApi';
+import { tenantKey } from '../../../src/mobile/query/queryClient';
 import { useTheme } from '../../../src/mobile/theme';
 import type { Invoice } from '../../../src/mobile/types';
 import { formatCurrency, formatDate, isManagerOrAdmin } from '../../../src/mobile/utils';
@@ -130,13 +132,17 @@ export default function InvoicesScreen() {
   const api = useApi();
   const router = useRouter();
   const navigation = useNavigation();
-  const { user } = useAuth();
+  const { user, tenantSubdomain } = useAuth();
   const { colors, spacing, radius } = useTheme();
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<InvoiceFilter>('unpaid');
   const canManage = isManagerOrAdmin(user);
+
+  // TanStack Query — tenant-scoped, persisted, auto-refetch on reconnect/foreground.
+  const { data, isLoading: loading, isRefetching: refreshing, refetch } = useQuery({
+    queryKey: tenantKey(tenantSubdomain, 'invoices'),
+    queryFn: () => api.getInvoices(),
+  });
+  const invoices: Invoice[] = data?.invoices ?? [];
 
   // Manager "+ New" header action (Pattern G)
   useEffect(() => {
@@ -154,18 +160,6 @@ export default function InvoicesScreen() {
       ),
     });
   }, [canManage, navigation, router, colors.navy, spacing.sm]);
-
-  // Pattern H: unchanged data load
-  const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true); else setLoading(true);
-    try {
-      const res = await api.getInvoices();
-      setInvoices(res.invoices ?? []);
-    } catch { /* ignore */ }
-    finally { if (isRefresh) setRefreshing(false); else setLoading(false); }
-  }, [api]);
-
-  useEffect(() => { void load(); }, [load]);
 
   // Skeleton loading guard — 4 SkeletonRows replace the old ActivityIndicator
   if (loading) {
@@ -215,7 +209,7 @@ export default function InvoicesScreen() {
             refreshing={refreshing}
             onRefresh={() => {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              void load(true);
+              void refetch();
             }}
           />
         }
