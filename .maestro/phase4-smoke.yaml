@@ -54,12 +54,14 @@ appId: com.hbs.mobile
 # LAST: open a job → Job detail native segmented control (pushed screen; end here)
 - tapOn:
     point: "30%,95%"
+# Job card testIDs are `jobs-card-<job.id>` (real API id, NOT an index) — match by
+# regex so the flow is seed-data-independent. (tour.yaml uses the same pattern.)
 - extendedWaitUntil:
     visible:
-      id: "jobs-card-0"
+      id: "jobs-card-.*"
     timeout: 10000
 - tapOn:
-    id: "jobs-card-0"
+    id: "jobs-card-.*"
 - extendedWaitUntil:
     visible:
       id: "jobdetail-section-tabs"
