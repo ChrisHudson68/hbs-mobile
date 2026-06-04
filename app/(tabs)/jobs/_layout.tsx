@@ -1,6 +1,5 @@
 import { Stack, useRouter } from 'expo-router';
-import { Pressable } from 'react-native';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { HeaderIconButton } from '@/components/ui/HeaderIconButton';
 import { useTheme } from '../../../src/mobile/theme';
 import { useAuth } from '../../../src/mobile/context/AuthContext';
 import { isManagerOrAdmin } from '../../../src/mobile/utils';
@@ -29,14 +28,13 @@ export default function JobsStackLayout() {
           title: 'Jobs',
           headerRight: canManage
             ? () => (
-                <Pressable
+                <HeaderIconButton
+                  name="plus"
+                  color={colors.navy}
                   onPress={() => router.push('/jobs/new')}
                   accessibilityLabel="New Job"
                   testID="jobs-new-button"
-                  hitSlop={8}
-                >
-                  <IconSymbol name="plus" size={22} color={colors.navy} />
-                </Pressable>
+                />
               )
             : undefined,
         }}

@@ -61,18 +61,20 @@ function SheetHeader({
 }) {
   const { spacing } = useTheme();
   return (
-    <View
-      style={{
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        minHeight: 44,
-        marginBottom: spacing.sm,
-      }}
-    >
-      <Button variant="ghost" size="sm" label="Cancel" onPress={onCancel} />
-      <Text variant="headline" weight="600">{title}</Text>
-      <Button variant="primary" size="sm" label={saveLabel} onPress={onSave} loading={loading} />
+    <View style={{ minHeight: 44, justifyContent: 'center', marginBottom: spacing.sm }}>
+      {/* Centered title, edge buttons overlaid — keeps the title optically
+          centered regardless of the Cancel / Save button widths. */}
+      <Text variant="headline" weight="600" style={{ textAlign: 'center' }}>{title}</Text>
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
+          flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+        }}
+      >
+        <Button variant="ghost" size="sm" label="Cancel" onPress={onCancel} />
+        <Button variant="primary" size="sm" label={saveLabel} onPress={onSave} loading={loading} />
+      </View>
     </View>
   );
 }

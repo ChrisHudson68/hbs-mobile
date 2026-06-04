@@ -27,6 +27,7 @@ import { ListRow } from '@/components/ui/ListRow';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { Sheet } from '@/components/ui/Sheet';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { HeaderIconButton } from '@/components/ui/HeaderIconButton';
 import { SwipeRow, closeOpenSwipeRow } from '@/components/ui/SwipeRow';
 import { SkeletonBlock } from '@/components/ui/SkeletonBlock';
 import { SkeletonRow } from '@/components/ui/SkeletonRow';
@@ -183,16 +184,20 @@ function SheetHeader({
 }) {
   const { spacing } = useTheme();
   return (
-    <View style={{
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      minHeight: 44,
-      marginBottom: spacing.sm,
-    }}>
-      <Button variant="ghost" size="sm" label="Cancel" onPress={onCancel} />
-      <Text variant="headline" weight="600">{title}</Text>
-      <Button variant={saveVariant} size="sm" label={saveLabel} onPress={onSave} loading={saving} />
+    <View style={{ minHeight: 44, justifyContent: 'center', marginBottom: spacing.sm }}>
+      {/* Title is centered on the full width so it stays optically centered
+          regardless of the differing Cancel / Save button widths. */}
+      <Text variant="headline" weight="600" style={{ textAlign: 'center' }}>{title}</Text>
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
+          flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+        }}
+      >
+        <Button variant="ghost" size="sm" label="Cancel" onPress={onCancel} />
+        <Button variant={saveVariant} size="sm" label={saveLabel} onPress={onSave} loading={saving} />
+      </View>
     </View>
   );
 }
@@ -321,17 +326,16 @@ export default function TimesheetsScreen() {
     if (!canManage) return;
     navigation.setOptions({
       headerRight: () => (
-        <Pressable
-          testID="timesheets-add-entry-button"
-          accessibilityLabel="Add Time Entry"
+        <HeaderIconButton
+          name={'plus' as never}
+          color={colors.navy}
           onPress={() => router.push('/timesheets/manual')}
-          style={{ marginRight: spacing.sm }}
-        >
-          <IconSymbol name={'plus' as never} size={22} color={colors.navy} />
-        </Pressable>
+          accessibilityLabel="Add Time Entry"
+          testID="timesheets-add-entry-button"
+        />
       ),
     });
-  }, [canManage, navigation, router, spacing.sm, colors.navy]);
+  }, [canManage, navigation, router, colors.navy]);
 
   // -------------------------------------------------------------------------
   // PROTECTED ZONE — DO NOT EDIT (handleClockIn GPS block)

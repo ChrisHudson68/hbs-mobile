@@ -34,11 +34,16 @@ function SheetHeader({
 }) {
   const { spacing } = useTheme();
   return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 44, marginBottom: spacing.sm }}>
-      <Button variant="ghost" size="sm" label="Cancel" onPress={onCancel} />
-      <Text variant="headline" weight="600">{title}</Text>
-      {/* Spacer to balance the Cancel button width */}
-      <View style={{ minWidth: 60 }} />
+    <View style={{ minHeight: 44, justifyContent: 'center', marginBottom: spacing.sm }}>
+      {/* Title centered on the full width; Cancel overlaid on the leading edge so
+          the title stays truly centered (no hand-tuned spacer width). */}
+      <Text variant="headline" weight="600" style={{ textAlign: 'center' }}>{title}</Text>
+      <View
+        pointerEvents="box-none"
+        style={{ position: 'absolute', left: 0, top: 0, bottom: 0, justifyContent: 'center' }}
+      >
+        <Button variant="ghost" size="sm" label="Cancel" onPress={onCancel} />
+      </View>
     </View>
   );
 }

@@ -20,6 +20,7 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Text } from '@/components/ui/Text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { HeaderIconButton } from '@/components/ui/HeaderIconButton';
 import { SkeletonRow } from '@/components/ui/SkeletonRow';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SwipeRow, closeOpenSwipeRow } from '@/components/ui/SwipeRow';
@@ -149,17 +150,16 @@ export default function InvoicesScreen() {
     if (!canManage) return;
     navigation.setOptions({
       headerRight: () => (
-        <Pressable
-          testID="invoices-new-button"
-          accessibilityLabel="New Invoice"
+        <HeaderIconButton
+          name="plus"
+          color={colors.navy}
           onPress={() => router.push('/invoices/new')}
-          style={{ padding: spacing.sm }}
-        >
-          <IconSymbol name="plus" size={22} color={colors.navy} />
-        </Pressable>
+          accessibilityLabel="New Invoice"
+          testID="invoices-new-button"
+        />
       ),
     });
-  }, [canManage, navigation, router, colors.navy, spacing.sm]);
+  }, [canManage, navigation, router, colors.navy]);
 
   // Skeleton loading guard — 4 SkeletonRows replace the old ActivityIndicator
   if (loading) {
