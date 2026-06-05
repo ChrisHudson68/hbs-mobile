@@ -406,30 +406,46 @@ export default function JobDetailScreen() {
 
   return (
     <Screen headerMode="native" padded={false}>
-      {/* Hero section */}
+      {/* Hero section — navy band carrying job identity + a visible Edit pill.
+          Text is forced white: navySurface is dark in BOTH themes, so tone="inverse"
+          (which flips to dark text in dark mode) would read low-contrast here. */}
       <View
         testID="jobdetail-hero"
         style={{
           backgroundColor: colors.navySurface,
+          flexDirection: 'row',
+          alignItems: 'flex-start',
+          gap: spacing.sm,
           padding: spacing.md,
-          gap: 4,
           borderBottomLeftRadius: radius.lg,
           borderBottomRightRadius: radius.lg,
         }}
       >
-        <Text variant="title2" tone="inverse" weight="700">{job.jobName}</Text>
-        {job.clientName ? <Text variant="body" tone="inverse">{job.clientName}</Text> : null}
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-          <Badge tone={statusTone(job.status)} label={job.status ?? 'Active'} />
-          {job.isOverhead && <Badge tone="warning" label="Overhead" />}
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text variant="title2" weight="700" style={{ color: '#FFFFFF' }}>{job.jobName}</Text>
+          {job.clientName ? <Text variant="body" style={{ color: 'rgba(255,255,255,0.82)' }}>{job.clientName}</Text> : null}
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+            <Badge tone={statusTone(job.status)} label={job.status ?? 'Active'} />
+            {job.isOverhead && <Badge tone="warning" label="Overhead" />}
+          </View>
         </View>
         {canManage && (
-          <Button
-            variant="ghost"
-            size="sm"
-            label="Edit"
+          <Pressable
             onPress={() => router.push({ pathname: '/jobs/new', params: { editId: id } })}
-          />
+            accessibilityRole="button"
+            accessibilityLabel="Edit job"
+            testID="jobdetail-edit-button"
+            hitSlop={8}
+            style={({ pressed }) => ({
+              flexDirection: 'row', alignItems: 'center', gap: 5,
+              paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999,
+              backgroundColor: 'rgba(255,255,255,0.16)',
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <IconSymbol name={'pencil' as never} size={13} color="#FFFFFF" />
+            <RNText style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>Edit</RNText>
+          </Pressable>
         )}
       </View>
 

@@ -88,7 +88,10 @@ function AppNavigator() {
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="jobs/new" options={{ title: 'New Job', headerBackTitle: 'Jobs', presentation: 'formSheet' }} />
-      <Stack.Screen name="jobs/[id]" options={{ title: 'Job Details', headerBackTitle: 'Jobs' }} />
+      {/* headerTransparent:false so the navy hero renders BELOW the header (a
+          transparent header let the hero's content sit behind it → it read as an
+          empty navy band). */}
+      <Stack.Screen name="jobs/[id]" options={{ title: 'Job Details', headerBackTitle: 'Jobs', headerTransparent: false }} />
       <Stack.Screen name="timesheets/manual" options={{ title: 'Add Time Entry', headerBackTitle: 'Timesheets', presentation: 'formSheet' }} />
       <Stack.Screen name="invoices/new" options={{ title: 'New Invoice', headerBackTitle: 'Invoices', presentation: 'formSheet' }} />
       <Stack.Screen name="invoices/[id]" options={{ title: 'Invoice', headerBackTitle: 'Invoices' }} />
