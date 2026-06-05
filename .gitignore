@@ -52,3 +52,7 @@ GEMINI.md
 .cursor/
 .aider*
 .continue/
+
+# Dev scratch — design/test screenshots + Playwright MCP debug dumps (stay local)
+/*.png
+.playwright-mcp/
