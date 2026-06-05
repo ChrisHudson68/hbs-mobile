@@ -1,5 +1,5 @@
-import { ReactNode } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ReactNode, useEffect, useState } from 'react';
+import { Keyboard, ScrollView, StyleSheet, View } from 'react-native';
 import {
   KeyboardAwareScrollView,
   KeyboardToolbar,
@@ -79,19 +79,15 @@ export function Screen({
   // return key). Lives under the app-root <KeyboardProvider> (app/_layout.tsx).
   if (keyboardAvoiding) {
     return (
-      <SafeAreaView edges={edges} style={[s.flex, { backgroundColor }]} testID={testID}>
-        <KeyboardAwareScrollView
-          style={s.flex}
-          contentContainerStyle={[s.scrollContent, contentPadding]}
-          keyboardShouldPersistTaps="handled"
-          contentInsetAdjustmentBehavior={isNativeHeader ? 'automatic' : 'never'}
-          bottomOffset={KEYBOARD_BOTTOM_OFFSET}
-          showsVerticalScrollIndicator={false}
-        >
-          {children}
-        </KeyboardAwareScrollView>
-        <KeyboardToolbar theme={KEYBOARD_TOOLBAR_THEME} />
-      </SafeAreaView>
+      <KeyboardAvoidingBody
+        edges={edges}
+        backgroundColor={backgroundColor}
+        contentPadding={contentPadding}
+        isNativeHeader={isNativeHeader}
+        testID={testID}
+      >
+        {children}
+      </KeyboardAvoidingBody>
     );
   }
 
@@ -112,6 +108,53 @@ export function Screen({
   return (
     <SafeAreaView edges={edges} style={[s.flex, { backgroundColor }]} testID={testID}>
       {inner}
+    </SafeAreaView>
+  );
+}
+
+/**
+ * Keyboard-aware scroll body. The Done/Prev/Next KeyboardToolbar renders ONLY while
+ * the keyboard is visible — by default it docks at the screen bottom when the keyboard
+ * is closed, which pushed content up / squeezed forms at rest (no keyboard). Scoped to
+ * its own component so only keyboardAvoiding screens subscribe to keyboard state.
+ */
+function KeyboardAvoidingBody({
+  children,
+  edges,
+  backgroundColor,
+  contentPadding,
+  isNativeHeader,
+  testID,
+}: {
+  children: ReactNode;
+  edges: Edge[];
+  backgroundColor: string;
+  contentPadding: { paddingHorizontal: number } | null;
+  isNativeHeader: boolean;
+  testID?: string;
+}) {
+  // Track keyboard visibility with RN's built-in Keyboard API (always available —
+  // no dependency on a specific keyboard-controller export). Gates the toolbar so it
+  // never docks at the screen bottom at rest.
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardWillShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardWillHide', () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+  return (
+    <SafeAreaView edges={edges} style={[s.flex, { backgroundColor }]} testID={testID}>
+      <KeyboardAwareScrollView
+        style={s.flex}
+        contentContainerStyle={[s.scrollContent, contentPadding]}
+        keyboardShouldPersistTaps="handled"
+        contentInsetAdjustmentBehavior={isNativeHeader ? 'automatic' : 'never'}
+        bottomOffset={KEYBOARD_BOTTOM_OFFSET}
+        showsVerticalScrollIndicator={false}
+      >
+        {children}
+      </KeyboardAwareScrollView>
+      {keyboardVisible ? <KeyboardToolbar theme={KEYBOARD_TOOLBAR_THEME} /> : null}
     </SafeAreaView>
   );
 }
