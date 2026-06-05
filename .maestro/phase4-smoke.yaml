@@ -6,7 +6,7 @@
 # last avoids needing an unreliable back-gesture before tab navigation.
 # Creds via -e SUBDOMAIN/EMAIL/PASSWORD — never hardcoded. Role-gated (employee
 # no-financials) + dark-mode checks are NOT covered here (need an employee account + manual pass).
-appId: com.hbs.mobile
+appId: com.hudsonbusinesssolutions.mobile
 ---
 - runFlow: login.yaml
 # Dashboard (redesigned) — clock card + search render

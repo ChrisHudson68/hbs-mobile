@@ -1,5 +1,5 @@
 # Live verification: More -> Employees navigates + roster renders (triage of pressure-test C1).
-appId: com.hbs.mobile
+appId: com.hudsonbusinesssolutions.mobile
 ---
 - runFlow: login.yaml
 - tapOn:

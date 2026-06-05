@@ -3,7 +3,7 @@
 # Credentials via -e SUBDOMAIN/EMAIL/PASSWORD — must be a manager/admin account.
 # Runs on the iOS SIMULATOR only (physical-iOS driver fails on Xcode 26).
 # appId = com.hbs.mobile (temp org-team bundle id; revert when Hudson org conversion lands).
-appId: com.hbs.mobile
+appId: com.hudsonbusinesssolutions.mobile
 ---
 # --- Login (manager account required for PDF share to be visible) ---
 - runFlow: login.yaml

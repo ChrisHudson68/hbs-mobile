@@ -1,7 +1,7 @@
 # Security E2E: logout fully purges session state.
 # login → More → Sign Out → confirm → assert Login screen → relaunch → STILL Login
 # (no auto-restore = SecureStore token wiped). Proves the logout purge path.
-appId: com.hbs.mobile
+appId: com.hudsonbusinesssolutions.mobile
 ---
 - runFlow: login.yaml
 # Go to More tab (90% across, y95%)

@@ -1,6 +1,6 @@
 # Clean standalone capture of the New Expense formSheet (manager). Isolated flow
 # (no employees detour) so the More → Add Expense quick action fires reliably.
-appId: com.hbs.mobile
+appId: com.hudsonbusinesssolutions.mobile
 ---
 - runFlow: login.yaml
 - tapOn:

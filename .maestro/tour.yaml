@@ -4,7 +4,7 @@
 # externally via simctl before each run. PREFIX + SHOTDIR + creds via -e.
 # Tab order: Dashboard(10%) Jobs(30%) Timesheets(50%) Invoices(70%) More(90%) @ y95%.
 # Pushed-screen back = header back-button text; formSheets not visited here.
-appId: com.hbs.mobile
+appId: com.hudsonbusinesssolutions.mobile
 ---
 - runFlow: login.yaml
 

@@ -3,7 +3,7 @@
 # Credentials via -e SUBDOMAIN/EMAIL/PASSWORD — never hardcoded.
 # Runs on the iOS SIMULATOR only (physical-iOS driver fails on Xcode 26).
 # appId = com.hbs.mobile (temp org-team bundle id; revert when Hudson org conversion lands).
-appId: com.hbs.mobile
+appId: com.hudsonbusinesssolutions.mobile
 ---
 # --- Login ---
 - runFlow: login.yaml

@@ -1,6 +1,6 @@
 # Keyboard-toolbar navy proof: open New Expense, focus the decimal Amount field
 # (raises keyboard + KeyboardToolbar Done button) and screenshot. Creds/SHOTDIR via -e.
-appId: com.hbs.mobile
+appId: com.hudsonbusinesssolutions.mobile
 ---
 - runFlow: login.yaml
 - tapOn:

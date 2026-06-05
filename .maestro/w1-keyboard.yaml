@@ -4,7 +4,7 @@
 # Also opens the gorhom record-payment sheet to confirm KeyboardProvider didn't
 # break it. Between sections we relaunchApp (stays logged in via keychain) to
 # reset to the dashboard cleanly instead of dismissing formSheets. Creds via -e.
-appId: com.hbs.mobile
+appId: com.hudsonbusinesssolutions.mobile
 ---
 - runFlow: login.yaml
 

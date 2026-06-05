@@ -1,7 +1,7 @@
 # Audit gap-filler: screens the tour/forms flows miss (More quick-actions need
 # POINT taps, not text-match). Plus a key interaction state (edit-time-entry
 # sheet). Role creds + SHOTDIR + PREFIX via -e. Nav optional for resilience.
-appId: com.hbs.mobile
+appId: com.hudsonbusinesssolutions.mobile
 ---
 - runFlow: login.yaml
 

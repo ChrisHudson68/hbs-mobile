@@ -2,7 +2,7 @@
 # (the 404-fix screen), New Expense formSheet. Quick-action rows are tapped by
 # POINT (text taps missed in the tour). Geometry from the More screenshot:
 # Manual Time Entry ~46%, Add Expense ~53%, Employees ~59% (y).
-appId: com.hbs.mobile
+appId: com.hudsonbusinesssolutions.mobile
 ---
 - runFlow: login.yaml
 - tapOn:

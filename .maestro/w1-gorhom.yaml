@@ -1,7 +1,7 @@
 # W1 regression check: gorhom record-payment sheet still works with the new
 # root KeyboardProvider. Opens the sheet and focuses its (gorhom-handled)
 # decimal-pad Amount field.
-appId: com.hbs.mobile
+appId: com.hudsonbusinesssolutions.mobile
 ---
 - runFlow: login.yaml
 - tapOn:

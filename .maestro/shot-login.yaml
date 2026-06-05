@@ -1,7 +1,7 @@
 # Screenshot the Login screen (pre-auth, role-independent). Appearance is set
 # externally via `xcrun simctl ui booted appearance light|dark` before the run.
 # PREFIX + SHOTDIR passed via -e. Creds vars unused here (no login performed).
-appId: com.hbs.mobile
+appId: com.hudsonbusinesssolutions.mobile
 ---
 - clearKeychain
 - launchApp

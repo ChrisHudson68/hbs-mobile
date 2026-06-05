@@ -1,7 +1,7 @@
 # Reliable Employees roster + employee-detail capture (More-row needs a POINT
 # tap; correct center from view hierarchy = 50%,59%). Role creds + SHOTDIR +
 # PREFIX via -e.
-appId: com.hbs.mobile
+appId: com.hudsonbusinesssolutions.mobile
 ---
 - runFlow: login.yaml
 - tapOn:
