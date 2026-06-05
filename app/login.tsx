@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -35,15 +35,11 @@ export default function LoginScreen() {
   const [emailError, setEmailError] = useState<string | undefined>();
   const [passwordError, setPasswordError] = useState<string | undefined>();
 
-  // A saved session locked behind biometrics → offer/auto-prompt the unlock.
+  // A saved session locked behind biometrics → show the "Use Face ID" button.
+  // NOTE: intentionally NOT auto-prompted on mount. Auto-firing Face ID the instant
+  // the login screen appears was jarring and fired right after Sign Out (logout →
+  // redirect to /login). Face ID is now strictly button-initiated.
   const canUseBiometricUnlock = biometrics.available && biometrics.enabled && hasLockedSession;
-
-  // Auto-prompt the biometric unlock once when a locked session is waiting.
-  useEffect(() => {
-    if (!canUseBiometricUnlock) return;
-    void handleBiometricLogin();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canUseBiometricUnlock]);
 
   const handleLogin = async () => {
     const cleanSubdomain = subdomain.trim().toLowerCase();

@@ -17,6 +17,13 @@ type AuthContextValue = {
   logout: () => Promise<void>;
   /** Reads the keychain-gated token (prompts Face ID/Touch ID) and restores the session. */
   unlockWithBiometrics: () => Promise<boolean>;
+  /**
+   * Re-store the current in-memory token with (enabled) or without (disabled) biometric
+   * gating. Call this when the user flips the biometric-lock toggle: enabling AFTER login
+   * is the case the gating-at-login path misses, so the token must be re-encrypted here or
+   * a later unlock finds no gated token. Re-stores from the in-memory token (no prompt).
+   */
+  applyBiometricLock: (enabled: boolean) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -145,6 +152,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const applyBiometricLock = useCallback(async (enabled: boolean) => {
+    // No active session → nothing to re-gate (the next login() will gate per the flag).
+    if (!token) return;
+    // Writing a biometric-gated item does NOT prompt (only reads do), so this is silent.
+    // Re-storing the in-memory plaintext token avoids a gated read here.
+    await SecureStore.setItemAsync(STORAGE_KEYS.token, token, tokenStoreOptions(enabled));
+  }, [token]);
+
   const logout = useCallback(async () => {
     if (tenantSubdomain && token) {
       try { await mobileLogout({ tenantSubdomain, token }); } catch { /* best effort */ }
@@ -167,7 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider value={{
       token, user, tenantSubdomain,
       isAuthenticated: Boolean(token && user && tenantSubdomain),
-      isLoading, hasLockedSession, login, logout, unlockWithBiometrics,
+      isLoading, hasLockedSession, login, logout, unlockWithBiometrics, applyBiometricLock,
     }}>
       {children}
     </AuthContext.Provider>
