@@ -1,0 +1,24 @@
+# Keyboard-toolbar navy proof: open New Expense, focus the decimal Amount field
+# (raises keyboard + KeyboardToolbar Done button) and screenshot. Creds/SHOTDIR via -e.
+appId: com.hudsonbusinesssolutions.mobile
+---
+- runFlow: login.yaml
+- tapOn:
+    point: "90%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "more-profile-card"
+    timeout: 12000
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%,51%"
+- extendedWaitUntil:
+    visible:
+      id: "newexpense-amount-input"
+    timeout: 12000
+- waitForAnimationToEnd
+- tapOn:
+    id: "newexpense-amount-input"
+- inputText: "250"
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-x4-kbtoolbar

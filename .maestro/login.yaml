@@ -1,0 +1,53 @@
+# Login E2E flow (VERIFY-02). Runs against the Login screen using the testIDs
+# added in plan 01-06. Credentials are passed at runtime via env vars
+# (-e SUBDOMAIN=.. -e EMAIL=.. -e PASSWORD=..) — never hardcoded here.
+#
+# appId is the locally-built bundle id (temp org-team id com.hbs.mobile), NOT the
+# app.json com.hudsonbusinesssolutions.mobile — see 01-06-SUMMARY deviation note.
+#
+# W1 (keyboard-controller): the screen shows a KeyboardToolbar (Prev/Next/Done)
+# above the keyboard. With the keyboard up, that toolbar overlays the field just
+# below the focused one. So between fields we DISMISS the keyboard (tap the
+# non-interactive headline) to bring every field back into the clear, then select
+# it — rather than tapping a field hidden under the toolbar.
+appId: com.hudsonbusinesssolutions.mobile
+---
+# Reset auth so the flow always starts logged-out at the Login screen. The session
+# token lives in the iOS keychain (expo-secure-store), so clearKeychain alone is
+# enough — AuthContext finds no token on the next launch and shows Login. (We avoid
+# Maestro clearState here: its app-reinstall path is broken on the Xcode 26 simctl.)
+- clearKeychain
+- launchApp
+- assertVisible:
+    id: "login-subdomain-input"
+- tapOn:
+    id: "login-subdomain-input"
+- inputText: "${SUBDOMAIN}"
+- tapOn:
+    point: "50%,20%"
+- tapOn:
+    id: "login-email-input"
+- inputText: "${EMAIL}"
+- tapOn:
+    point: "50%,20%"
+- tapOn:
+    id: "login-password-input"
+- inputText: "${PASSWORD}"
+- tapOn:
+    point: "50%,20%"
+- tapOn:
+    id: "login-submit-button"
+# iOS may show a "Save Password?" system dialog after submitting a secure field.
+# Dismiss it if present — optional so the flow doesn't fail when it doesn't appear.
+- tapOn:
+    text: "Not Now"
+    optional: true
+# Post-login assertion: login is an async network call, so WAIT (up to 20s) for the
+# authenticated shell rather than racing it. Assert on stable testIDs (transform-
+# proof, role-independent). The clock card + search input always render.
+- extendedWaitUntil:
+    visible:
+      id: "dashboard-job-search-input"
+    timeout: 20000
+- assertVisible:
+    id: "dashboard-clock-card"

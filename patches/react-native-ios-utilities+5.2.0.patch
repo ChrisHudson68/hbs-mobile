@@ -1,0 +1,13 @@
+diff --git a/node_modules/react-native-ios-utilities/react-native-ios-utilities.podspec b/node_modules/react-native-ios-utilities/react-native-ios-utilities.podspec
+index 609ca82..2ff5d4c 100644
+--- a/node_modules/react-native-ios-utilities/react-native-ios-utilities.podspec
++++ b/node_modules/react-native-ios-utilities/react-native-ios-utilities.podspec
+@@ -27,7 +27,7 @@ reactNativeTargetVersion = reactNativeVersion.split('.')[1].to_i
+ use_hermes = ENV['USE_HERMES'] == nil || ENV['USE_HERMES'] == '1'
+ fabric_enabled = ENV['RCT_NEW_ARCH_ENABLED'] == '1'
+ 
+-folly_version = '2022.05.16.00'
++folly_version = '2024.11.18.00'
+ folly_compiler_flags = (get_folly_config()[:compiler_flags] || '').strip
+ base_flags = "-DREACT_NATIVE_TARGET_VERSION=#{reactNativeTargetVersion}"
+ 

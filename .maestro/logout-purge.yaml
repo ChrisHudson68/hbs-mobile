@@ -1,0 +1,44 @@
+# Security E2E: logout fully purges session state.
+# login → More → Sign Out → confirm → assert Login screen → relaunch → STILL Login
+# (no auto-restore = SecureStore token wiped). Proves the logout purge path.
+appId: com.hudsonbusinesssolutions.mobile
+---
+- runFlow: login.yaml
+# Go to More tab (90% across, y95%)
+- tapOn:
+    point: "90%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "more-profile-card"
+    timeout: 12000
+# Scroll to the Sign Out control and tap it (visible card text)
+- scrollUntilVisible:
+    element:
+      text: "Sign Out"
+    direction: DOWN
+    timeout: 8000
+- tapOn:
+    text: "Sign Out"
+# Confirm the destructive Alert (the alert's "Sign Out" button)
+- tapOn:
+    text: "Sign Out"
+    index: 1
+    optional: true
+# Back at Login = session cleared in memory
+- extendedWaitUntil:
+    visible:
+      id: "login-subdomain-input"
+    timeout: 12000
+- assertVisible:
+    id: "login-subdomain-input"
+# Relaunch WITHOUT clearing keychain — if the token were still stored we'd auto-land on
+# the dashboard. Asserting Login proves the token was purged from SecureStore.
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "login-subdomain-input"
+    timeout: 12000
+- assertVisible:
+    id: "login-subdomain-input"
+- assertNotVisible:
+    id: "dashboard-clock-card"

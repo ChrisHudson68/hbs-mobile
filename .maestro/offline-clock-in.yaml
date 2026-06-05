@@ -1,0 +1,88 @@
+# Phase 5 E2E: offline clock-in → queued punch assertion
+#
+# IMPORTANT — Simulator offline toggle limitation:
+# Maestro has no scriptable network-toggle action for the iOS Simulator. The Simulator's
+# "Network Link Conditioner" and Flight Mode are system controls not reachable via UIKit
+# automation. This flow therefore verifies the ONLINE path of the clock-in punch, which
+# exercises the same timesheets-job-picker → timesheets-clockin-button selector path as
+# the offline queue.
+#
+# Manual offline verification is required (see the Task 3 smoke checklist):
+#   1. Enable Flight Mode in Simulator → Hardware → Network → Offline (or Simulator menu).
+#   2. Open the app → Timesheets → select a job → tap Clock In.
+#   3. Assert the "Queued" toast appears and the entry shows as pending.
+#   4. Re-enable network → confirm the flusher syncs the punch.
+#
+# The Maestro automated portion below confirms the clock-in selector path is reachable and
+# the flow completes on the running Simulator build. The offline-queue logic (useOfflineQueue,
+# confirmClockOut, useOfflineQueueFlusher) is verified unchanged by the protected-file
+# git-diff audit in Task 3 — no code change was needed.
+#
+# Credentials via -e SUBDOMAIN/EMAIL/PASSWORD — never hardcoded.
+# Runs on the iOS SIMULATOR only (physical-iOS driver fails on Xcode 26).
+# appId = com.hbs.mobile (temp org-team bundle id; revert when Hudson org conversion lands).
+appId: com.hudsonbusinesssolutions.mobile
+---
+# --- Login ---
+- runFlow: login.yaml
+
+# --- Navigate to Timesheets tab ---
+# Tab order: Dashboard(10%) Jobs(30%) Timesheets(50%) Invoices(70%) More(90%)
+- tapOn:
+    point: "50%,95%"
+- waitForAnimationToEnd
+
+# --- Wait for the job picker (idle / not clocked in) ---
+- extendedWaitUntil:
+    visible:
+      id: "timesheets-job-picker"
+    timeout: 15000
+- assertVisible:
+    id: "timesheets-job-picker"
+
+# --- Open job picker and select a job ---
+- tapOn:
+    id: "timesheets-job-picker"
+- waitForAnimationToEnd
+# Tap the first available job row in the sheet list
+- tapOn:
+    point: "50%,35%"
+- waitForAnimationToEnd
+
+# --- Verify Clock In button is enabled and reachable ---
+- assertVisible:
+    id: "timesheets-clockin-button"
+
+# --- Tap Clock In (online path — exercises the same handleClockIn / isOnline() gate) ---
+- tapOn:
+    id: "timesheets-clockin-button"
+# Dismiss GPS permission dialog if present
+- tapOn:
+    text: "Allow While Using App"
+    optional: true
+- tapOn:
+    text: "Allow Once"
+    optional: true
+
+# --- Assert clocked-in state (Clock Out button appears) ---
+# In online mode this is an immediate Clocked In success.
+# In offline mode (manual step) this is the Queued toast path.
+- extendedWaitUntil:
+    visible:
+      id: "timesheets-clockout-button"
+    timeout: 20000
+- assertVisible:
+    id: "timesheets-clockout-button"
+
+# --- Clock back out to leave the app in a clean state ---
+- tapOn:
+    id: "timesheets-clockout-button"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "timesheets-clockout-sheet"
+- tapOn:
+    text: "Clock Out"
+- extendedWaitUntil:
+    visible:
+      id: "timesheets-clockin-button"
+    timeout: 20000

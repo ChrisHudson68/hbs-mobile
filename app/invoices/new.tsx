@@ -1,160 +1,312 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Pressable, SafeAreaView,
-  ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Alert, StyleSheet, TextInput, View,
 } from 'react-native';
 import { useApi } from '../../src/mobile/hooks/useApi';
-import { Colors, Radius, Spacing } from '../../src/mobile/theme';
+import { useTheme } from '../../src/mobile/theme';
+import {
+  formatDateInputValue,
+  validateAmount,
+  validateDate,
+  validateRequired,
+} from '../../src/mobile/utils';
 import type { JobListItem } from '../../src/mobile/types';
+import { Button } from '@/components/ui/Button';
+import { DateField } from '@/components/ui/DateField';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Input } from '@/components/ui/Input';
+import { ListRow } from '@/components/ui/ListRow';
+import { Screen } from '@/components/ui/Screen';
+import { Sheet } from '@/components/ui/Sheet';
+import { Text } from '@/components/ui/Text';
 
+// ---------------------------------------------------------------------------
+// Sheet header — Cancel / title / Save row (D-04)
+// ---------------------------------------------------------------------------
+function SheetHeader({
+  title,
+  onCancel,
+}: {
+  title: string;
+  onCancel: () => void;
+}) {
+  const { spacing } = useTheme();
+  return (
+    <View style={{ minHeight: 44, justifyContent: 'center', marginBottom: spacing.sm }}>
+      {/* Title centered on the full width; Cancel overlaid on the leading edge so
+          the title stays truly centered (no hand-tuned spacer width). */}
+      <Text variant="headline" weight="600" style={{ textAlign: 'center' }}>{title}</Text>
+      <View
+        pointerEvents="box-none"
+        style={{ position: 'absolute', left: 0, top: 0, bottom: 0, justifyContent: 'center' }}
+      >
+        <Button variant="ghost" size="sm" label="Cancel" onPress={onCancel} />
+      </View>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Screen
+// ---------------------------------------------------------------------------
 export default function NewInvoiceScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const api = useApi();
+  const { colors, spacing, radius } = useTheme();
   const { jobId: preselectedJobId } = useLocalSearchParams<{ jobId?: string }>();
 
+  // --- data -----------------------------------------------------------------
   const [jobs, setJobs] = useState<JobListItem[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
 
+  // --- form state -----------------------------------------------------------
   const [selectedJobId, setSelectedJobId] = useState<number | null>(
-    preselectedJobId ? Number(preselectedJobId) : null
+    preselectedJobId ? Number(preselectedJobId) : null,
   );
-  const [dateIssued, setDateIssued] = useState(new Date().toISOString().slice(0, 10));
-  const [dueDate, setDueDate] = useState('');
+  /** Date objects for the pickers; serialised to YYYY-MM-DD on save. */
+  const [dateIssued, setDateIssued] = useState<Date | null>(new Date());
+  const [due, setDue] = useState<Date | null>(null);
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // --- inline errors --------------------------------------------------------
+  const [jobError, setJobError] = useState<string | undefined>(undefined);
+  const [amountError, setAmountError] = useState<string | undefined>(undefined);
+  const [dueError, setDueError] = useState<string | undefined>(undefined);
+  const [dateIssuedError, setDateIssuedError] = useState<string | undefined>(undefined);
+
+  // --- UI state (pickers/sheets) -------------------------------------------
+  const [jobPickerOpen, setJobPickerOpen] = useState(false);
+
+  // --- derived --------------------------------------------------------------
+  const selectedJob = jobs.find(j => j.id === selectedJobId) ?? null;
+
+  // Dirty = any field the user has touched (drives discard guard D-10)
+  const isDirty =
+    selectedJobId !== null ||
+    amount.trim().length > 0 ||
+    due !== null ||
+    notes.trim().length > 0;
+
+  // --- load -----------------------------------------------------------------
   const load = useCallback(async () => {
     setLoadingJobs(true);
     try {
       const res = await api.getJobs();
       if (res.jobs) setJobs(res.jobs.filter(j => !j.isOverhead));
-    } catch { /* ignore */ }
+    } catch { /* ignore — user can retry by backing out */ }
     finally { setLoadingJobs(false); }
   }, [api]);
 
   useEffect(() => { void load(); }, [load]);
 
+  // --- discard guard (D-10) ------------------------------------------------
+  useEffect(() => {
+    const sub = navigation.addListener('beforeRemove', (e) => {
+      if (!isDirty) return;
+      e.preventDefault();
+      Alert.alert(
+        'Discard changes?',
+        "Your changes won't be saved.",
+        [
+          { text: 'Keep Editing', style: 'cancel' },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: () => navigation.dispatch(e.data.action),
+          },
+        ],
+      );
+    });
+    return sub;
+  }, [navigation, isDirty]);
+
+  // --- save -----------------------------------------------------------------
   const handleSave = async () => {
-    if (!selectedJobId) { Alert.alert('Required', 'Select a job.'); return; }
-    const amt = parseFloat(amount);
-    if (!amount.trim() || isNaN(amt) || amt <= 0) { Alert.alert('Required', 'Enter a valid invoice amount.'); return; }
-    if (!dueDate.trim()) { Alert.alert('Required', 'Enter a due date.'); return; }
+    const nextJobError = selectedJobId ? undefined : validateRequired('', 'Job');
+    const nextAmountError = validateAmount(amount, 'invoice amount');
+    const nextDueError = due
+      ? undefined
+      : validateRequired('', 'Due date');
+    // A DateField that yields a Date never needs free-text date validation, but
+    // run validateDate on the serialised value as a defensive guard.
+    const nextDateIssuedError = dateIssued
+      ? validateDate(formatDateInputValue(dateIssued))
+      : validateRequired('', 'Date issued');
+
+    setJobError(nextJobError);
+    setAmountError(nextAmountError);
+    setDueError(nextDueError);
+    setDateIssuedError(nextDateIssuedError);
+
+    if (nextJobError || nextAmountError || nextDueError || nextDateIssuedError) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await api.createInvoice({
-        jobId: selectedJobId,
-        dateIssued,
-        dueDate,
-        amount: amt,
+        jobId: selectedJobId!,
+        dateIssued: formatDateInputValue(dateIssued!),
+        dueDate: formatDateInputValue(due!),
+        amount: Number(amount.trim().replace(/^\$/, '').replace(/,/g, '')),
         notes: notes.trim() || undefined,
       });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Created', 'Invoice created successfully.', [
         { text: 'View', onPress: () => router.replace(`/invoices/${res.invoice?.id ?? ''}`) },
         { text: 'Done', onPress: () => router.back() },
       ]);
     } catch (e) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Error', e instanceof Error ? e.message : 'Failed to create invoice.');
       setSaving(false);
     }
   };
 
+  // --- loading guard --------------------------------------------------------
   if (loadingJobs) {
-    return <SafeAreaView style={s.safe}><View style={s.center}><ActivityIndicator size="large" color={Colors.navy} /></View></SafeAreaView>;
+    return (
+      <Screen headerMode="native">
+        <View style={s.center}>
+          <ActivityIndicator size="large" color={colors.navy} />
+        </View>
+      </Screen>
+    );
   }
 
+  // --- render ---------------------------------------------------------------
   return (
-    <SafeAreaView style={s.safe}>
-      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-
-        <View style={s.field}>
-          <Text style={s.label}>Job *</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
-            <View style={s.pills}>
-              {jobs.map(j => (
-                <Pressable
-                  key={j.id}
-                  style={[s.pill, selectedJobId === j.id && s.pillActive]}
-                  onPress={() => setSelectedJobId(j.id)}
-                >
-                  <Text style={[s.pillText, selectedJobId === j.id && s.pillTextActive]}>
-                    {j.jobName}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
-
-        <View style={s.field}>
-          <Text style={s.label}>Invoice Amount *</Text>
-          <TextInput
-            style={s.input}
-            value={amount}
-            onChangeText={setAmount}
-            placeholder="0.00"
-            keyboardType="decimal-pad"
-            placeholderTextColor={Colors.mutedLight}
+    <Screen headerMode="native" scroll keyboardAvoiding>
+      <View style={{ gap: spacing.md, paddingVertical: spacing.md }}>
+        {/* Job picker trigger (D-05) */}
+        <View>
+          <Text variant="footnote" tone="muted" style={{ marginBottom: spacing.xs }}>
+            Job *
+          </Text>
+          <ListRow
+            title={selectedJob ? selectedJob.jobName : 'Tap to select'}
+            trailing="chevron"
+            onPress={() => { setJobPickerOpen(true); if (jobError) setJobError(undefined); }}
+            testID="newinvoice-job-picker"
           />
+          {jobError ? (
+            <Text variant="footnote" tone="danger" numberOfLines={1} style={{ marginTop: spacing.xs }}>
+              {jobError}
+            </Text>
+          ) : null}
         </View>
 
-        <View style={s.field}>
-          <Text style={s.label}>Date Issued</Text>
-          <TextInput
-            style={s.input}
-            value={dateIssued}
-            onChangeText={setDateIssued}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={Colors.mutedLight}
-          />
-        </View>
+        {/* Invoice Amount */}
+        <Input
+          label="Invoice Amount *"
+          value={amount}
+          onChangeText={(v) => { setAmount(v); if (amountError) setAmountError(undefined); }}
+          keyboardType="decimal-pad"
+          placeholder="0.00"
+          error={amountError}
+          testID="newinvoice-amount-input"
+        />
 
-        <View style={s.field}>
-          <Text style={s.label}>Due Date *</Text>
-          <TextInput
-            style={s.input}
-            value={dueDate}
-            onChangeText={setDueDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={Colors.mutedLight}
-          />
-        </View>
+        {/* Date Issued — DateField (D-07) */}
+        <DateField
+          label="Date Issued *"
+          value={dateIssued}
+          onChange={(d) => { setDateIssued(d); if (dateIssuedError) setDateIssuedError(undefined); }}
+          error={dateIssuedError}
+          testID="newinvoice-dateissued-picker"
+        />
 
-        <View style={s.field}>
-          <Text style={s.label}>Notes</Text>
+        {/* Due Date — DateField (D-07) */}
+        <DateField
+          label="Due Date *"
+          value={due}
+          onChange={(d) => { setDue(d); if (dueError) setDueError(undefined); }}
+          error={dueError}
+          testID="newinvoice-duedate-picker"
+        />
+
+        {/* Notes — raw TextInput (kit Input has no multiline prop, known Bug 2) */}
+        <View style={{ gap: spacing.xs }}>
+          <Text variant="footnote" tone="muted">Notes</Text>
           <TextInput
-            style={[s.input, { minHeight: 80, textAlignVertical: 'top' }]}
+            style={[s.notesInput, {
+              borderColor: colors.border,
+              borderRadius: radius.sm,
+              backgroundColor: colors.card,
+              color: colors.text,
+              padding: spacing.sm,
+            }]}
             value={notes}
             onChangeText={setNotes}
             placeholder="Optional notes for the invoice"
-            placeholderTextColor={Colors.mutedLight}
+            placeholderTextColor={colors.mutedLight}
+            selectionColor={colors.navy}
             multiline
           />
         </View>
 
-        <Pressable style={[s.saveBtn, saving && s.btnDisabled]} onPress={() => void handleSave()} disabled={saving}>
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Create Invoice</Text>}
-        </Pressable>
+        {/* Primary CTA — scrolls above the keyboard with the form */}
+        <Button
+          variant="primary"
+          size="lg"
+          fullWidth
+          label="Create Invoice"
+          loading={saving}
+          onPress={() => void handleSave()}
+          testID="newinvoice-save-button"
+        />
+      </View>
 
-      </ScrollView>
-    </SafeAreaView>
+      {/* Job picker Sheet — sibling, NEVER inside ScrollView (gorhom-sheet-anchoring) */}
+      {jobPickerOpen && (
+        <Sheet
+          snapPoints={['50%', '85%']}
+          scrollable
+          onClose={() => setJobPickerOpen(false)}
+          header={
+            <SheetHeader
+              title="Select Job"
+              onCancel={() => setJobPickerOpen(false)}
+            />
+          }
+        >
+          {jobs.length === 0 ? (
+            <View style={{ alignItems: 'center', paddingVertical: spacing.xl }}>
+              <Text variant="subhead" tone="muted">No jobs available.</Text>
+            </View>
+          ) : (
+            jobs.map(j => (
+              <ListRow
+                key={j.id}
+                title={j.jobName}
+                trailing={selectedJobId === j.id ? 'custom' : 'none'}
+                trailingCustom={
+                  selectedJobId === j.id
+                    ? <IconSymbol name="checkmark" size={18} color={colors.navy} />
+                    : undefined
+                }
+                onPress={() => {
+                  setSelectedJobId(j.id);
+                  if (jobError) setJobError(undefined);
+                  setJobPickerOpen(false);
+                }}
+              />
+            ))
+          )}
+        </Sheet>
+      )}
+    </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  scroll: { padding: Spacing.md, gap: Spacing.md },
-  field: { gap: 6 },
-  label: { fontSize: 13, fontWeight: '600', color: Colors.muted },
-  pills: { flexDirection: 'row', gap: 8, paddingHorizontal: 2 },
-  pill: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 99, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card },
-  pillActive: { backgroundColor: Colors.navy, borderColor: Colors.navy },
-  pillText: { fontSize: 13, fontWeight: '600', color: Colors.muted },
-  pillTextActive: { color: '#fff' },
-  input: { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: 12, fontSize: 15, color: Colors.text, backgroundColor: Colors.card },
-  saveBtn: { backgroundColor: Colors.navy, borderRadius: Radius.md, padding: 14, alignItems: 'center', marginTop: 8 },
-  saveBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
-  btnDisabled: { opacity: 0.6 },
+  // Raw multiline input shell (kit Input has no multiline prop — Bug 2)
+  notesInput: { borderWidth: 1, minHeight: 80, fontSize: 15, textAlignVertical: 'top' },
 });

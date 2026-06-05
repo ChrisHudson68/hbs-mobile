@@ -57,7 +57,13 @@ export function formatDate(value: string | null | undefined) {
 }
 
 export function formatDateInputValue(date: Date) {
-  return date.toISOString().slice(0, 10);
+  // LOCAL date components — NOT toISOString() (UTC), which rolls the day forward
+  // in timezones behind UTC (e.g. US evening → tomorrow), mis-dating defaults
+  // and picked dates. Build YYYY-MM-DD from the local calendar day.
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export function formatHours(hours: number | null | undefined) {
@@ -65,7 +71,13 @@ export function formatHours(hours: number | null | undefined) {
 }
 
 export function formatCurrency(amount: number | null | undefined) {
-  return `$${Number(amount || 0).toFixed(2)}`;
+  const value = Number(amount || 0);
+  const sign = value < 0 ? '-' : '';
+  const formatted = Math.abs(value).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${sign}$${formatted}`;
 }
 
 export function formatDuration(seconds: number) {
@@ -250,10 +262,40 @@ export function errorMessageFromCode(error?: string) {
       return 'That job is no longer valid. Refresh jobs and try again.';
     case 'job_not_found':
       return 'That job could not be found.';
+    case 'job_required':
+      return 'Select a job before clocking in.';
     case 'receipt_required':
       return 'Please select a receipt image before uploading.';
     case 'unauthorized':
+    case 'bearer_token_required':
       return 'Your session is no longer valid. Please sign in again.';
+    case 'forbidden':
+      return "You don't have permission to do that.";
+    case 'too_many_attempts':
+      return 'Too many attempts. Please wait a minute and try again.';
+    case 'week_approved':
+      return 'That week is already approved and locked.';
+    case 'not_approved':
+      return 'That entry has not been approved yet.';
+    case 'already_pending':
+      return 'There is already a pending request for this.';
+    case 'invalid_hours':
+      return 'Enter a valid number of hours.';
+    case 'reason_required':
+      return 'Please provide a reason.';
+    case 'reason_too_long':
+      return 'That reason is too long. Please shorten it.';
+    case 'email_and_password_required':
+      return 'Enter your email and password.';
+    case 'not_linked_to_employee':
+      return 'Your user is not linked to an employee record yet.';
+    case 'employee_not_found':
+      return 'That employee could not be found.';
+    case 'invalid_params':
+      return 'Some details are missing or invalid. Check the form and try again.';
+    case 'invalid_id':
+    case 'not_found':
+      return 'That item could not be found.';
     default:
       return error ? `Request failed: ${error}` : 'Something went wrong. Please try again.';
   }
@@ -294,4 +336,41 @@ export function buildReceiptConfidenceText(receipt: UploadedReceipt | null) {
   if (receipt.errorMessage) return receipt.errorMessage;
   if (receipt.hasSuggestions) return 'OCR found useful suggestions you can review below.';
   return 'Receipt uploaded successfully, but OCR did not find strong suggestions.';
+}
+
+// Form validators — each returns an error message string, or undefined when valid.
+// Designed to slot into the `useState<string | undefined>()` + `<Input error={…} />` pattern.
+
+export function validateRequired(value: string, label = 'This field') {
+  return value.trim().length > 0 ? undefined : `${label} is required`;
+}
+
+export function validateAmount(value: string, label = 'Amount') {
+  const cleaned = value.trim().replace(/^\$/, '').replace(/,/g, '');
+  const amount = Number(cleaned);
+  if (Number.isFinite(amount) && amount > 0) return undefined;
+  return `Enter a valid ${label.toLowerCase()}`;
+}
+
+export function validateNumber(value: string, label = 'Number') {
+  return Number.isFinite(Number(value)) ? undefined : `Enter a valid ${label.toLowerCase()}`;
+}
+
+export function validateHours(value: string) {
+  const hours = Number(value);
+  if (Number.isFinite(hours) && hours > 0 && hours <= 24) return undefined;
+  return 'Enter valid hours (0–24)';
+}
+
+export function validateDate(value: string) {
+  if (value.trim().length === 0) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return 'Enter a valid date';
+  const [y, m, d] = value.split('-').map(Number);
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return 'Enter a valid date';
+  // Reject calendar rollovers (e.g. 2026-02-30 → Mar 2): parsed components must match the input.
+  if (date.getFullYear() !== y || date.getMonth() + 1 !== m || date.getDate() !== d) {
+    return 'Enter a valid date';
+  }
+  return undefined;
 }

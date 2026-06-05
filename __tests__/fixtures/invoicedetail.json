@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "invoice": {
+    "id": 28,
+    "jobId": 38,
+    "jobName": "Lakeside Deck & Patio",
+    "clientName": "Karen & Mark Sullivan",
+    "invoiceNumber": "INV-1006",
+    "dateIssued": "2026-05-20",
+    "dueDate": "2026-06-19",
+    "amount": 18750,
+    "status": "Unpaid",
+    "notes": "Full contract — deck & patio.",
+    "totalPaid": 0,
+    "balance": 18750,
+    "payments": []
+  }
+}

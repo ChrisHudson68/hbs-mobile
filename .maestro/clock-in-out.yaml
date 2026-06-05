@@ -1,0 +1,76 @@
+# Phase 5 E2E: login → clock-in → clock-out
+# Drives the new job-picker sheet (D-05) and clock-out note sheet (D-02).
+# Credentials via -e SUBDOMAIN/EMAIL/PASSWORD — never hardcoded.
+# Runs on the iOS SIMULATOR only (physical-iOS driver fails on Xcode 26).
+# appId = com.hbs.mobile (temp org-team bundle id; revert when Hudson org conversion lands).
+appId: com.hudsonbusinesssolutions.mobile
+---
+# --- Login ---
+- runFlow: login.yaml
+
+# --- Navigate to Timesheets tab ---
+# Tab order: Dashboard(10%) Jobs(30%) Timesheets(50%) Invoices(70%) More(90%)
+- tapOn:
+    point: "50%,95%"
+- waitForAnimationToEnd
+
+# --- Clock card must be visible (idle — not already clocked in) ---
+- extendedWaitUntil:
+    visible:
+      id: "timesheets-job-picker"
+    timeout: 15000
+
+# --- Open the job picker ---
+- tapOn:
+    id: "timesheets-job-picker"
+- waitForAnimationToEnd
+
+# --- Select the first available job row (the sheet is a scrollable list;
+#     tap the first visible ListRow that is not the header) ---
+- tapOn:
+    point: "50%,35%"
+- waitForAnimationToEnd
+
+# --- Clock In ---
+- assertVisible:
+    id: "timesheets-clockin-button"
+- tapOn:
+    id: "timesheets-clockin-button"
+# Dismiss GPS permission dialog if it appears (tap Allow while in Use / Allow Once / Don't Allow)
+- tapOn:
+    text: "Allow While Using App"
+    optional: true
+- tapOn:
+    text: "Allow Once"
+    optional: true
+# Wait for clocked-in state: Clock Out button replaces Clock In
+- extendedWaitUntil:
+    visible:
+      id: "timesheets-clockout-button"
+    timeout: 20000
+- assertVisible:
+    id: "timesheets-clockout-button"
+
+# --- Open the Clock-Out note sheet ---
+- tapOn:
+    id: "timesheets-clockout-button"
+- waitForAnimationToEnd
+# Sheet should be visible
+- assertVisible:
+    id: "timesheets-clockout-sheet"
+
+# --- Type an optional note ---
+- tapOn:
+    point: "50%,55%"
+- inputText: "Finished framing, started drywall"
+
+# --- Confirm Clock Out ---
+- tapOn:
+    text: "Clock Out"
+# Wait for idle state (Clock In button re-appears, sheet dismissed)
+- extendedWaitUntil:
+    visible:
+      id: "timesheets-clockin-button"
+    timeout: 20000
+- assertVisible:
+    id: "timesheets-clockin-button"

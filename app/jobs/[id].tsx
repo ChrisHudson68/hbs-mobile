@@ -1,16 +1,154 @@
+import SegmentedControl from '@react-native-segmented-control/segmented-control';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Modal, Pressable, RefreshControl,
-  SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View,
+  Alert, LayoutAnimation, Pressable, RefreshControl,
+  ScrollView, StyleSheet, Text as RNText, View,
 } from 'react-native';
+import Animated, { Extrapolation, interpolate, useAnimatedStyle } from 'react-native-reanimated';
+import type { SharedValue } from 'react-native-reanimated';
+import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
+import * as Haptics from 'expo-haptics';
 import { useApi } from '../../src/mobile/hooks/useApi';
 import { useAuth } from '../../src/mobile/context/AuthContext';
-import { Colors, Radius, Spacing } from '../../src/mobile/theme';
+import { useTheme } from '../../src/mobile/theme';
 import type { JobExpense, JobIncome, JobListItem, JobTimeEntry } from '../../src/mobile/types';
-import { formatCurrency, formatDate, formatHours, isManagerOrAdmin } from '../../src/mobile/utils';
+import {
+  formatCurrency, formatDate, formatDateInputValue, formatHours,
+  isActiveStatus, isManagerOrAdmin,
+  validateAmount, validateDate, validateHours, validateRequired,
+} from '../../src/mobile/utils';
+import { Screen } from '@/components/ui/Screen';
+import { Text } from '@/components/ui/Text';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { DateField } from '@/components/ui/DateField';
+import { Input } from '@/components/ui/Input';
+import { ListRow } from '@/components/ui/ListRow';
+import { Sheet } from '@/components/ui/Sheet';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { SwipeRow, closeOpenSwipeRow } from '@/components/ui/SwipeRow';
+import { SkeletonBlock } from '@/components/ui/SkeletonBlock';
+import { SkeletonRow } from '@/components/ui/SkeletonRow';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 type Tab = 'overview' | 'income' | 'expenses' | 'time';
+
+const STATUS_VALUES = ['Active', 'On Hold', 'Completed'] as const;
+const TAB_VALUES = ['Overview', 'Income', 'Expenses', 'Time'] as const;
+const TAB_KEYS: Tab[] = ['overview', 'income', 'expenses', 'time'];
+
+function statusTone(status: string | null): 'success' | 'warning' | 'neutral' {
+  if (isActiveStatus(status)) return 'success';
+  if (status === 'On Hold') return 'warning';
+  return 'neutral';
+}
+
+// Standard Cancel/Save sheet header (Pattern A — D-04).
+function SheetHeader({
+  title,
+  onCancel,
+  onSave,
+  saveLabel = 'Save',
+  loading = false,
+}: {
+  title: string;
+  onCancel: () => void;
+  onSave: () => void;
+  saveLabel?: string;
+  loading?: boolean;
+}) {
+  const { spacing } = useTheme();
+  return (
+    <View style={{ minHeight: 44, justifyContent: 'center', marginBottom: spacing.sm }}>
+      {/* Centered title, edge buttons overlaid — keeps the title optically
+          centered regardless of the Cancel / Save button widths. */}
+      <Text variant="headline" weight="600" style={{ textAlign: 'center' }}>{title}</Text>
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
+          flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+        }}
+      >
+        <Button variant="ghost" size="sm" label="Cancel" onPress={onCancel} />
+        <Button variant="primary" size="sm" label={saveLabel} onPress={onSave} loading={loading} />
+      </View>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RowSwipeActions — shared swipe panel for job-detail expense + time rows.
+// Delete (danger/trash) first, then Edit (navy/pencil) — matches the locked
+// 06-UI-SPEC action contract (Delete shown first on left-swipe). Panel = 144pt
+// (2 × 72pt). Uses sv.get() via useAnimatedStyle — React Compiler-compliant
+// (D-12). Icon-only buttons carry accessibilityLabels.
+// ---------------------------------------------------------------------------
+
+const SWIPE_BUTTON_WIDTH = 72;
+const SWIPE_PANEL_WIDTH = SWIPE_BUTTON_WIDTH * 2;
+
+type RowSwipeActionsProps = {
+  drag: SharedValue<number>;
+  methods: SwipeableMethods;
+  onDelete: () => void;
+  onEdit: () => void;
+  testIDDelete: string;
+  testIDEdit: string;
+  deleteLabel: string;
+  editLabel: string;
+};
+
+function RowSwipeActions({
+  drag,
+  methods,
+  onDelete,
+  onEdit,
+  testIDDelete,
+  testIDEdit,
+  deleteLabel,
+  editLabel,
+}: RowSwipeActionsProps) {
+  const { colors, radius } = useTheme();
+
+  // Translate the panel so it anchors to the right edge during the swipe
+  // (Pitfall 3: drag is negative for left-swipe / right-actions revealed).
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateX: interpolate(
+          drag.get(),
+          [-SWIPE_PANEL_WIDTH, 0],
+          [0, SWIPE_PANEL_WIDTH],
+          Extrapolation.CLAMP,
+        ),
+      },
+    ],
+  }));
+
+  return (
+    <Animated.View style={[{ width: SWIPE_PANEL_WIDTH, flexDirection: 'row' }, animStyle]}>
+      <Pressable
+        style={[s.swipeBtn, { backgroundColor: colors.danger, borderRadius: radius.sm }]}
+        onPress={() => { methods.close(); onDelete(); }}
+        accessibilityLabel={deleteLabel}
+        testID={testIDDelete}
+      >
+        <IconSymbol name={'trash' as never} size={20} color={colors.inverse} />
+      </Pressable>
+      <Pressable
+        style={[s.swipeBtn, { backgroundColor: colors.navySurface, borderRadius: radius.sm }]}
+        onPress={() => { methods.close(); onEdit(); }}
+        accessibilityLabel={editLabel}
+        testID={testIDEdit}
+      >
+        <IconSymbol name={'pencil' as never} size={20} color={colors.inverse} />
+      </Pressable>
+    </Animated.View>
+  );
+}
 
 export default function JobDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -18,6 +156,7 @@ export default function JobDetailScreen() {
   const navigation = useNavigation();
   const router = useRouter();
   const { user } = useAuth();
+  const { colors, spacing, radius } = useTheme();
   const canManage = isManagerOrAdmin(user);
 
   const [job, setJob] = useState<JobListItem | null>(null);
@@ -30,17 +169,60 @@ export default function JobDetailScreen() {
 
   const [statusSaving, setStatusSaving] = useState(false);
 
-  const [editExpense, setEditExpense] = useState<JobExpense | null>(null);
+  const [editExpenseEntry, setEditExpenseEntry] = useState<JobExpense | null>(null);
   const [expCategory, setExpCategory] = useState('');
   const [expVendor, setExpVendor] = useState('');
   const [expAmount, setExpAmount] = useState('');
   const [expDate, setExpDate] = useState('');
   const [expSaving, setExpSaving] = useState(false);
+  const [expCategoryError, setExpCategoryError] = useState<string | undefined>(undefined);
+  const [expVendorError, setExpVendorError] = useState<string | undefined>(undefined);
+  const [expAmountError, setExpAmountError] = useState<string | undefined>(undefined);
+  const [expDateError, setExpDateError] = useState<string | undefined>(undefined);
 
   const [editTimeEntry, setEditTimeEntry] = useState<JobTimeEntry | null>(null);
   const [timeEditHours, setTimeEditHours] = useState('');
   const [timeEditNote, setTimeEditNote] = useState('');
   const [timeEditSaving, setTimeEditSaving] = useState(false);
+  const [timeEditHoursError, setTimeEditHoursError] = useState<string | undefined>(undefined);
+
+  const [addingIncome, setAddingIncome] = useState(false);
+  const [incomeAmount, setIncomeAmount] = useState('');
+  const [incomeDate, setIncomeDate] = useState(new Date().toISOString().slice(0, 10));
+  const [incomeDesc, setIncomeDesc] = useState('');
+  const [incomeSaving, setIncomeSaving] = useState(false);
+  const [incomeAmountError, setIncomeAmountError] = useState<string | undefined>(undefined);
+  const [incomeDateError, setIncomeDateError] = useState<string | undefined>(undefined);
+  const [incomeDescError, setIncomeDescError] = useState<string | undefined>(undefined);
+
+  const jobId = Number(id);
+
+  const load = useCallback(async (isRefresh = false) => {
+    if (!jobId) return;
+    if (isRefresh) setRefreshing(true); else setLoading(true);
+    try {
+      const [jobRes, incomeRes, expRes, timeRes] = await Promise.all([
+        api.getJobDetail(jobId),
+        canManage ? api.getJobIncome(jobId).catch(() => null) : Promise.resolve(null),
+        canManage ? api.getJobExpenses(jobId).catch(() => null) : Promise.resolve(null),
+        canManage ? api.getJobTimeEntries(jobId).catch(() => null) : Promise.resolve(null),
+      ]);
+      if (jobRes.job) {
+        setJob(jobRes.job);
+        // Keep the native header generic — the navy hero (job name + client +
+        // status badges + Edit) is the single source of identity. Showing the
+        // job name here too duplicated it and made the hero read as an empty
+        // navy band on sparse jobs.
+        navigation.setOptions({ title: 'Job Details' });
+      }
+      if (incomeRes?.income) setIncome(incomeRes.income);
+      if (expRes?.expenses) setExpenseList(expRes.expenses);
+      if (timeRes?.entries) setTimeEntries(timeRes.entries);
+    } catch { /* ignore */ }
+    finally { if (isRefresh) setRefreshing(false); else setLoading(false); }
+  }, [api, jobId, canManage, navigation]);
+
+  useEffect(() => { void load(); }, [load]);
 
   const handleStatusChange = async (newStatus: string) => {
     if (newStatus === job?.status) return;
@@ -52,39 +234,14 @@ export default function JobDetailScreen() {
     finally { setStatusSaving(false); }
   };
 
-  const [addingIncome, setAddingIncome] = useState(false);
-  const [incomeAmount, setIncomeAmount] = useState('');
-  const [incomeDate, setIncomeDate] = useState(new Date().toISOString().slice(0, 10));
-  const [incomeDesc, setIncomeDesc] = useState('');
-  const [incomeSaving, setIncomeSaving] = useState(false);
-
-  const jobId = Number(id);
-
-  const load = useCallback(async (isRefresh = false) => {
-    if (!jobId) return;
-    isRefresh ? setRefreshing(true) : setLoading(true);
-    try {
-      const [jobRes, incomeRes, expRes, timeRes] = await Promise.all([
-        api.getJobDetail(jobId),
-        canManage ? api.getJobIncome(jobId).catch(() => null) : Promise.resolve(null),
-        canManage ? api.getJobExpenses(jobId).catch(() => null) : Promise.resolve(null),
-        canManage ? api.getJobTimeEntries(jobId).catch(() => null) : Promise.resolve(null),
-      ]);
-      if (jobRes.job) {
-        setJob(jobRes.job);
-        navigation.setOptions({ title: jobRes.job.jobName ?? 'Job Details' });
-      }
-      if (incomeRes?.income) setIncome(incomeRes.income);
-      if (expRes?.expenses) setExpenseList(expRes.expenses);
-      if (timeRes?.entries) setTimeEntries(timeRes.entries);
-    } catch { /* ignore */ }
-    finally { isRefresh ? setRefreshing(false) : setLoading(false); }
-  }, [api, jobId, canManage, navigation]);
-
-  useEffect(() => { void load(); }, [load]);
-
   const handleAddIncome = async () => {
-    if (!incomeAmount.trim()) { Alert.alert('Required', 'Enter an amount.'); return; }
+    const amountErr = validateAmount(incomeAmount);
+    const dateErr = validateRequired(incomeDate, 'Date') ?? validateDate(incomeDate);
+    const descErr = validateRequired(incomeDesc, 'Description');
+    setIncomeAmountError(amountErr);
+    setIncomeDateError(dateErr);
+    setIncomeDescError(descErr);
+    if (amountErr || dateErr || descErr) return;
     setIncomeSaving(true);
     try {
       await api.addJobIncome(jobId, {
@@ -99,28 +256,44 @@ export default function JobDetailScreen() {
   };
 
   const openEditExpense = (exp: JobExpense) => {
-    setEditExpense(exp);
+    setEditExpenseEntry(exp);
     setExpCategory(exp.category);
     setExpVendor(exp.vendor ?? '');
     setExpAmount(String(exp.amount));
     setExpDate(exp.date);
+    setExpCategoryError(undefined);
+    setExpVendorError(undefined);
+    setExpAmountError(undefined);
+    setExpDateError(undefined);
   };
 
   const confirmEditExpense = async () => {
-    if (!editExpense) return;
+    if (!editExpenseEntry) return;
+    const categoryErr = validateRequired(expCategory, 'Category');
+    const vendorErr = validateRequired(expVendor, 'Vendor');
+    const amountErr = validateAmount(expAmount);
+    const dateErr = validateRequired(expDate, 'Date') ?? validateDate(expDate);
+    setExpCategoryError(categoryErr);
+    setExpVendorError(vendorErr);
+    setExpAmountError(amountErr);
+    setExpDateError(dateErr);
+    if (categoryErr || vendorErr || amountErr || dateErr) return;
     const amount = parseFloat(expAmount);
-    if (isNaN(amount) || amount <= 0) { Alert.alert('Invalid', 'Enter a valid amount.'); return; }
     setExpSaving(true);
     try {
-      await api.editExpense(editExpense.id, {
+      await api.editExpense(editExpenseEntry.id, {
         category: expCategory.trim(),
         vendor: expVendor.trim() || undefined,
         amount,
         date: expDate.trim(),
       });
-      setEditExpense(null);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setEditExpenseEntry(null);
       await load();
-    } catch (e) { Alert.alert('Error', e instanceof Error ? e.message : 'Failed'); }
+    } catch (e) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+    }
     finally { setExpSaving(false); }
   };
 
@@ -128,7 +301,16 @@ export default function JobDetailScreen() {
     Alert.alert('Delete Expense', 'Remove this expense?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
-        try { await api.deleteExpense(expenseId); await load(); }
+        try {
+          await api.deleteExpense(expenseId);
+          // Optimistically drop the row so the slide-out animates THIS commit (D-10).
+          // load() with no args sets loading=true and swaps the whole screen to the
+          // full-screen skeleton, so configureNext would animate content→skeleton, not
+          // the row removal. Reconcile job rollups silently via refresh mode.
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          setExpenseList((prev) => prev.filter((x) => x.id !== expenseId));
+          void load(true);
+        }
         catch (e) { Alert.alert('Error', e instanceof Error ? e.message : 'Failed'); }
       }},
     ]);
@@ -138,7 +320,16 @@ export default function JobDetailScreen() {
     Alert.alert('Delete Time Entry', 'Remove this time entry?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
-        try { await api.deleteTimeEntry(entryId); await load(); }
+        try {
+          await api.deleteTimeEntry(entryId);
+          // Optimistically drop the row so the slide-out animates THIS commit (D-10).
+          // load() with no args sets loading=true and swaps the whole screen to the
+          // full-screen skeleton, so configureNext would animate content→skeleton, not
+          // the row removal. Reconcile job rollups silently via refresh mode.
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          setTimeEntries((prev) => prev.filter((x) => x.id !== entryId));
+          void load(true);
+        }
         catch (e) { Alert.alert('Error', e instanceof Error ? e.message : 'Failed'); }
       }},
     ]);
@@ -148,24 +339,28 @@ export default function JobDetailScreen() {
     setEditTimeEntry(entry);
     setTimeEditHours(String(entry.hours));
     setTimeEditNote(entry.note ?? '');
+    setTimeEditHoursError(undefined);
   };
 
   const confirmEditTimeEntry = async () => {
     if (!editTimeEntry) return;
+    const hoursErr = validateHours(timeEditHours);
+    setTimeEditHoursError(hoursErr);
+    if (hoursErr) return;
     const hours = parseFloat(timeEditHours);
-    if (isNaN(hours) || hours <= 0 || hours > 24) {
-      Alert.alert('Invalid', 'Enter a valid number of hours (0–24).');
-      return;
-    }
     setTimeEditSaving(true);
     try {
       await api.editTimeEntry(editTimeEntry.id, {
         hours,
         note: timeEditNote.trim() || null,
       });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setEditTimeEntry(null);
       await load();
-    } catch (e) { Alert.alert('Error', e instanceof Error ? e.message : 'Failed'); }
+    } catch (e) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+    }
     finally { setTimeEditSaving(false); }
   };
 
@@ -180,303 +375,520 @@ export default function JobDetailScreen() {
   };
 
   if (loading) {
-    return <SafeAreaView style={s.safe}><View style={s.center}><ActivityIndicator size="large" color={Colors.navy} /></View></SafeAreaView>;
+    return (
+      <Screen headerMode="native" testID="jobdetail-skeleton">
+        <View style={{ padding: spacing.md, gap: 10 }}>
+          {/* Tab-bar rect — mimics the section SegmentedControl */}
+          <SkeletonBlock width="100%" height={40} borderRadius={radius.md} />
+          {[0, 1, 2, 3].map(i => <SkeletonRow key={i} />)}
+        </View>
+      </Screen>
+    );
   }
 
   if (!job) {
-    return <SafeAreaView style={s.safe}><View style={s.center}><Text style={s.empty}>Job not found.</Text></View></SafeAreaView>;
+    return (
+      <Screen headerMode="native">
+        <View style={s.center}><Text variant="body" tone="muted">Job not found.</Text></View>
+      </Screen>
+    );
   }
 
   const f = job.financials;
   const totalExpenses = expenseList.reduce((sum, e) => sum + e.amount, 0);
   const totalTime = timeEntries.reduce((sum, e) => sum + e.hours, 0);
 
+  // Derive Date values for the DateFields from the YYYY-MM-DD string state.
+  // Anchor at local midnight so the displayed day matches the stored string
+  // regardless of timezone (mirrors expenses/new.tsx).
+  const expDateValue = /^\d{4}-\d{2}-\d{2}$/.test(expDate) ? new Date(`${expDate}T00:00:00`) : null;
+  const incomeDateValue = /^\d{4}-\d{2}-\d{2}$/.test(incomeDate) ? new Date(`${incomeDate}T00:00:00`) : null;
+
   return (
-    <SafeAreaView style={s.safe}>
-      <Modal visible={!!editTimeEntry} transparent animationType="fade" onRequestClose={() => setEditTimeEntry(null)}>
-        <View style={s.modalOverlay}>
-          <View style={s.modalCard}>
-            <Text style={s.modalTitle}>Edit Time Entry</Text>
-            <Text style={[s.modalTitle, { fontSize: 13, fontWeight: '600', color: Colors.muted, marginTop: -8 }]}>
-              {editTimeEntry ? `${editTimeEntry.employeeName} · ${formatDate(editTimeEntry.date)}` : ''}
-            </Text>
-            <TextInput style={s.modalInput} placeholder="Hours" placeholderTextColor={Colors.mutedLight} value={timeEditHours} onChangeText={setTimeEditHours} keyboardType="decimal-pad" autoFocus />
-            <TextInput style={s.modalInput} placeholder="Note (optional)" placeholderTextColor={Colors.mutedLight} value={timeEditNote} onChangeText={setTimeEditNote} multiline />
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <Pressable style={[s.modalBtn, { flex: 1, backgroundColor: Colors.navy }]} onPress={() => void confirmEditTimeEntry()} disabled={timeEditSaving}>
-                {timeEditSaving ? <ActivityIndicator color="#fff" /> : <Text style={s.modalBtnText}>Save</Text>}
-              </Pressable>
-              <Pressable style={[s.modalBtn, { flex: 1, backgroundColor: Colors.bg, borderWidth: 1, borderColor: Colors.border }]} onPress={() => setEditTimeEntry(null)}>
-                <Text style={[s.modalBtnText, { color: Colors.muted }]}>Cancel</Text>
-              </Pressable>
-            </View>
+    <Screen headerMode="native" padded={false}>
+      {/* Hero section — navy band carrying job identity + a visible Edit pill.
+          Text is forced white: navySurface is dark in BOTH themes, so tone="inverse"
+          (which flips to dark text in dark mode) would read low-contrast here. */}
+      <View
+        testID="jobdetail-hero"
+        style={{
+          backgroundColor: colors.navySurface,
+          flexDirection: 'row',
+          alignItems: 'flex-start',
+          gap: spacing.sm,
+          padding: spacing.md,
+          borderBottomLeftRadius: radius.lg,
+          borderBottomRightRadius: radius.lg,
+        }}
+      >
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text variant="title2" weight="700" style={{ color: '#FFFFFF' }}>{job.jobName}</Text>
+          {job.clientName ? <Text variant="body" style={{ color: 'rgba(255,255,255,0.82)' }}>{job.clientName}</Text> : null}
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+            <Badge tone={statusTone(job.status)} label={job.status ?? 'Active'} />
+            {job.isOverhead && <Badge tone="warning" label="Overhead" />}
           </View>
         </View>
-      </Modal>
-
-      <Modal visible={!!editExpense} transparent animationType="fade" onRequestClose={() => setEditExpense(null)}>
-        <View style={s.modalOverlay}>
-          <View style={s.modalCard}>
-            <Text style={s.modalTitle}>Edit Expense</Text>
-            <TextInput style={s.modalInput} placeholder="Category" placeholderTextColor={Colors.mutedLight} value={expCategory} onChangeText={setExpCategory} />
-            <TextInput style={s.modalInput} placeholder="Vendor (optional)" placeholderTextColor={Colors.mutedLight} value={expVendor} onChangeText={setExpVendor} />
-            <TextInput style={s.modalInput} placeholder="Amount" placeholderTextColor={Colors.mutedLight} value={expAmount} onChangeText={setExpAmount} keyboardType="decimal-pad" />
-            <TextInput style={s.modalInput} placeholder="Date (YYYY-MM-DD)" placeholderTextColor={Colors.mutedLight} value={expDate} onChangeText={setExpDate} />
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <Pressable style={[s.modalBtn, { flex: 1, backgroundColor: Colors.navy }]} onPress={() => void confirmEditExpense()} disabled={expSaving}>
-                {expSaving ? <ActivityIndicator color="#fff" /> : <Text style={s.modalBtnText}>Save</Text>}
-              </Pressable>
-              <Pressable style={[s.modalBtn, { flex: 1, backgroundColor: Colors.bg, borderWidth: 1, borderColor: Colors.border }]} onPress={() => setEditExpense(null)}>
-                <Text style={[s.modalBtnText, { color: Colors.muted }]}>Cancel</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <View style={s.heroCard}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.heroTitle}>{job.jobName}</Text>
-            {job.clientName ? <Text style={s.heroSub}>{job.clientName}</Text> : null}
-          </View>
-          {canManage && (
-            <Pressable style={s.editBtn} onPress={() => router.push({ pathname: '/jobs/new', params: { editId: id } })}>
-              <Text style={s.editBtnText}>Edit</Text>
-            </Pressable>
-          )}
-        </View>
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-          <View style={s.heroBadge}><Text style={s.heroBadgeText}>{job.status ?? 'Active'}</Text></View>
-          {job.isOverhead && <View style={[s.heroBadge, { backgroundColor: 'rgba(245,158,11,0.2)' }]}><Text style={[s.heroBadgeText, { color: Colors.yellow }]}>Overhead</Text></View>}
-        </View>
+        {canManage && (
+          <Pressable
+            onPress={() => router.push({ pathname: '/jobs/new', params: { editId: id } })}
+            accessibilityRole="button"
+            accessibilityLabel="Edit job"
+            testID="jobdetail-edit-button"
+            hitSlop={8}
+            style={({ pressed }) => ({
+              flexDirection: 'row', alignItems: 'center', gap: 5,
+              paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999,
+              backgroundColor: 'rgba(255,255,255,0.16)',
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <IconSymbol name={'pencil' as never} size={13} color="#FFFFFF" />
+            <RNText style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>Edit</RNText>
+          </Pressable>
+        )}
       </View>
 
+      {/* Status switcher (manager only) — native SegmentedControl */}
       {canManage && (
-        <View style={s.statusRow}>
-          {(['Active', 'On Hold', 'Completed'] as const).map(st => (
-            <Pressable
-              key={st}
-              style={[s.statusPill, job.status === st && s.statusPillActive]}
-              onPress={() => void handleStatusChange(st)}
-              disabled={statusSaving}
-            >
-              <Text style={[s.statusPillText, job.status === st && s.statusPillTextActive]}>{st}</Text>
-            </Pressable>
-          ))}
-          {statusSaving && <ActivityIndicator size="small" color={Colors.navy} style={{ marginLeft: 4 }} />}
+        <View style={{ paddingHorizontal: spacing.md, paddingVertical: 10 }}>
+          <SegmentedControl
+            values={[...STATUS_VALUES]}
+            selectedIndex={STATUS_VALUES.indexOf((job.status ?? 'Active') as typeof STATUS_VALUES[number])}
+            onChange={(e) => void handleStatusChange(
+              STATUS_VALUES[e.nativeEvent.selectedSegmentIndex]
+            )}
+            tintColor={colors.navySurface}
+            activeFontStyle={{ color: colors.inverse }}
+            enabled={!statusSaving}
+          />
         </View>
       )}
 
-      <View style={s.tabBar}>
-        {(['overview', 'income', 'expenses', 'time'] as Tab[]).map(t => (
-          <Pressable key={t} style={[s.tabBtn, tab === t && s.tabBtnActive]} onPress={() => setTab(t)}>
-            <Text style={[s.tabText, tab === t && s.tabTextActive]}>{t.charAt(0).toUpperCase() + t.slice(1)}</Text>
-          </Pressable>
-        ))}
+      {/* Section tabs — native SegmentedControl */}
+      <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.sm }}>
+        <SegmentedControl
+          values={[...TAB_VALUES]}
+          selectedIndex={TAB_KEYS.indexOf(tab)}
+          onChange={(e) => setTab(TAB_KEYS[e.nativeEvent.selectedSegmentIndex])}
+          tintColor={colors.navySurface}
+          activeFontStyle={{ color: colors.inverse }}
+          testID="jobdetail-section-tabs"
+        />
       </View>
 
+      {/* Tab content */}
       <ScrollView
-        contentContainerStyle={s.scroll}
+        contentContainerStyle={{ padding: spacing.md, gap: spacing.md, paddingBottom: 32 }}
+        contentInsetAdjustmentBehavior="automatic"
+        onScrollBeginDrag={closeOpenSwipeRow}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
       >
-        {tab === 'overview' && f && (
+        {/* Overview tab */}
+        {tab === 'overview' && (
           <>
-            <View style={s.statsGrid}>
-              <View style={s.statCard}><Text style={s.statLabel}>Income</Text><Text style={s.statValue}>{formatCurrency(f.totalIncome)}</Text></View>
-              <View style={s.statCard}><Text style={s.statLabel}>Expenses</Text><Text style={s.statValue}>{formatCurrency(f.totalExpenses)}</Text></View>
-              <View style={s.statCard}><Text style={s.statLabel}>Labor</Text><Text style={s.statValue}>{formatCurrency(f.totalLabor)}</Text></View>
-              <View style={[s.statCard, { borderTopColor: Number(f.profit) >= 0 ? Colors.success : Colors.danger }]}>
-                <Text style={s.statLabel}>Profit</Text>
-                <Text style={[s.statValue, { color: Number(f.profit) >= 0 ? Colors.success : Colors.danger }]}>{formatCurrency(f.profit)}</Text>
-              </View>
-            </View>
-            <View style={s.statsGrid}>
-              <View style={s.statCard}><Text style={s.statLabel}>Invoiced</Text><Text style={s.statValue}>{formatCurrency(f.totalInvoiced)}</Text></View>
-              <View style={s.statCard}><Text style={s.statLabel}>Collected</Text><Text style={s.statValue}>{formatCurrency(f.totalCollected)}</Text></View>
-              <View style={s.statCard}><Text style={s.statLabel}>Hours</Text><Text style={s.statValue}>{formatHours(f.totalHours)}</Text></View>
-              <View style={s.statCard}><Text style={s.statLabel}>Unpaid Inv.</Text><Text style={s.statValue}>{f.unpaidInvoices}</Text></View>
-            </View>
-            {(job as any).jobDescription ? (
-              <View style={s.card}><Text style={s.cardTitle}>Description</Text><Text style={s.cardBody}>{(job as any).jobDescription}</Text></View>
+            {canManage && f ? (
+              <>
+                <View style={s.statsGrid}>
+                  <View style={s.statCardWrapper}>
+                    <Card elevation="sm" padding="sm" radius="md">
+                      <View style={{ borderTopWidth: 3, borderTopColor: colors.border, marginBottom: 6 }} />
+                      <Text variant="caption" tone="muted">Income</Text>
+                      <Text variant="headline" weight="700">{formatCurrency(f.totalIncome)}</Text>
+                    </Card>
+                  </View>
+                  <View style={s.statCardWrapper}>
+                    <Card elevation="sm" padding="sm" radius="md">
+                      <View style={{ borderTopWidth: 3, borderTopColor: colors.border, marginBottom: 6 }} />
+                      <Text variant="caption" tone="muted">Expenses</Text>
+                      <Text variant="headline" weight="700">{formatCurrency(f.totalExpenses)}</Text>
+                    </Card>
+                  </View>
+                  <View style={s.statCardWrapper}>
+                    <Card elevation="sm" padding="sm" radius="md">
+                      <View style={{ borderTopWidth: 3, borderTopColor: colors.border, marginBottom: 6 }} />
+                      <Text variant="caption" tone="muted">Labor</Text>
+                      <Text variant="headline" weight="700">{formatCurrency(f.totalLabor)}</Text>
+                    </Card>
+                  </View>
+                  <View style={s.statCardWrapper}>
+                    <Card elevation="sm" padding="sm" radius="md">
+                      {(() => {
+                        const profit = Number(f.profit);
+                        // Zero profit renders like every other stat tile (navy/dark
+                        // text + neutral border) — only true positive/negative profit
+                        // earns success-green / danger-red. Singling out $0.00 in muted
+                        // gray made it read as disabled next to the other $0.00 tiles.
+                        const profitColor = profit > 0 ? colors.success : profit < 0 ? colors.danger : colors.text;
+                        const profitBorder = profit > 0 ? colors.success : profit < 0 ? colors.danger : colors.border;
+                        return (
+                          <>
+                            <View style={{ borderTopWidth: 3, borderTopColor: profitBorder, marginBottom: 6 }} />
+                            <Text variant="caption" tone="muted">Profit</Text>
+                            <RNText style={{ color: profitColor, fontSize: 17, fontWeight: '700' }}>
+                              {formatCurrency(f.profit)}
+                            </RNText>
+                          </>
+                        );
+                      })()}
+                    </Card>
+                  </View>
+                </View>
+                <View style={s.statsGrid}>
+                  <View style={s.statCardWrapper}>
+                    <Card elevation="sm" padding="sm" radius="md">
+                      <View style={{ borderTopWidth: 3, borderTopColor: colors.border, marginBottom: 6 }} />
+                      <Text variant="caption" tone="muted">Invoiced</Text>
+                      <Text variant="headline" weight="700">{formatCurrency(f.totalInvoiced)}</Text>
+                    </Card>
+                  </View>
+                  <View style={s.statCardWrapper}>
+                    <Card elevation="sm" padding="sm" radius="md">
+                      <View style={{ borderTopWidth: 3, borderTopColor: colors.border, marginBottom: 6 }} />
+                      <Text variant="caption" tone="muted">Collected</Text>
+                      <Text variant="headline" weight="700">{formatCurrency(f.totalCollected)}</Text>
+                    </Card>
+                  </View>
+                  <View style={s.statCardWrapper}>
+                    <Card elevation="sm" padding="sm" radius="md">
+                      <View style={{ borderTopWidth: 3, borderTopColor: colors.border, marginBottom: 6 }} />
+                      <Text variant="caption" tone="muted">Hours</Text>
+                      <Text variant="headline" weight="700">{formatHours(f.totalHours)}</Text>
+                    </Card>
+                  </View>
+                  <View style={s.statCardWrapper}>
+                    <Card elevation="sm" padding="sm" radius="md">
+                      <View style={{ borderTopWidth: 3, borderTopColor: colors.border, marginBottom: 6 }} />
+                      <Text variant="caption" tone="muted">Unpaid Inv.</Text>
+                      <Text variant="headline" weight="700">{f.unpaidInvoices}</Text>
+                    </Card>
+                  </View>
+                </View>
+              </>
+            ) : !canManage ? (
+              <Card elevation="sm" padding="md" radius="md">
+                <Text variant="subhead" tone="muted">
+                  {job.jobDescription ?? 'No description available.'}
+                </Text>
+              </Card>
+            ) : null}
+            {canManage && job.jobDescription ? (
+              <Card elevation="sm" padding="md" radius="md">
+                <Text variant="footnote" weight="700" tone="muted">Description</Text>
+                <Text variant="body">{job.jobDescription}</Text>
+              </Card>
             ) : null}
           </>
         )}
 
+        {/* Income tab */}
         {tab === 'income' && (
           <>
-            {canManage && !addingIncome && (
-              <Pressable style={s.addRowBtn} onPress={() => setAddingIncome(true)}>
-                <Text style={s.addRowBtnText}>+ Add Income</Text>
-              </Pressable>
+            {canManage && (
+              <Button
+                variant="secondary"
+                size="md"
+                fullWidth
+                label="+ Add Income"
+                onPress={() => setAddingIncome(true)}
+              />
             )}
-            {addingIncome && (
-              <View style={s.card}>
-                <Text style={s.cardTitle}>Add Income</Text>
-                <TextInput style={s.input} placeholder="Amount (e.g. 1500.00)" value={incomeAmount} onChangeText={setIncomeAmount} keyboardType="decimal-pad" placeholderTextColor={Colors.mutedLight} />
-                <TextInput style={s.input} placeholder="Date (YYYY-MM-DD)" value={incomeDate} onChangeText={setIncomeDate} placeholderTextColor={Colors.mutedLight} />
-                <TextInput style={s.input} placeholder="Description (optional)" value={incomeDesc} onChangeText={setIncomeDesc} placeholderTextColor={Colors.mutedLight} />
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <Pressable style={[s.saveBtn, { flex: 1 }]} onPress={() => void handleAddIncome()} disabled={incomeSaving}>
-                    {incomeSaving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Save</Text>}
-                  </Pressable>
-                  <Pressable style={[s.cancelBtn, { flex: 1 }]} onPress={() => setAddingIncome(false)}>
-                    <Text style={s.cancelBtnText}>Cancel</Text>
-                  </Pressable>
-                </View>
+            {income.length === 0 ? (
+              <View style={s.emptyState}>
+                <IconSymbol name={'dollarsign.circle' as never} size={40} color={colors.mutedLight} />
+                <RNText style={{ textAlign: 'center', color: colors.muted, fontSize: 15 }}>No income recorded yet.</RNText>
               </View>
+            ) : (
+              income.map(i => (
+                <ListRow
+                  key={i.id}
+                  title={formatCurrency(i.amount)}
+                  subtitle={`${formatDate(i.date)}${i.description ? ' · ' + i.description : ''}`}
+                  trailing={canManage ? 'custom' : 'none'}
+                  trailingCustom={
+                    canManage
+                      ? (
+                        <Pressable onPress={() => handleDeleteIncome(i.id)} style={{ padding: 8 }}>
+                          <RNText style={{ color: colors.danger, fontWeight: '700', fontSize: 16 }}>✕</RNText>
+                        </Pressable>
+                      )
+                      : undefined
+                  }
+                />
+              ))
             )}
-            {income.length === 0 && <Text style={s.empty}>No income recorded.</Text>}
-            {income.map(i => (
-              <View key={i.id} style={s.rowCard}>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.rowAmount}>{formatCurrency(i.amount)}</Text>
-                  <Text style={s.rowSub}>{formatDate(i.date)}{i.description ? ` · ${i.description}` : ''}</Text>
-                </View>
-                {canManage && (
-                  <Pressable onPress={() => handleDeleteIncome(i.id)} style={s.deleteBtn}>
-                    <Text style={s.deleteBtnText}>✕</Text>
-                  </Pressable>
-                )}
-              </View>
-            ))}
           </>
         )}
 
+        {/* Expenses tab */}
         {tab === 'expenses' && (
           <>
             {canManage && (
-              <Pressable style={s.addRowBtn} onPress={() => router.push({ pathname: '/expenses/new', params: { jobId: id } })}>
-                <Text style={s.addRowBtnText}>+ Add Expense</Text>
-              </Pressable>
+              <Button
+                variant="secondary"
+                size="md"
+                fullWidth
+                label="+ Add Expense"
+                onPress={() => router.push({ pathname: '/expenses/new', params: { jobId: id } })}
+              />
             )}
-            {expenseList.length === 0
-              ? <Text style={s.empty}>No expenses recorded.</Text>
-              : (
-                <>
+            {expenseList.length === 0 ? (
+              <EmptyState
+                icon="creditcard"
+                message="No expenses."
+                actionLabel={canManage ? 'Add Expense' : undefined}
+                onAction={canManage ? () => router.push({ pathname: '/expenses/new', params: { jobId: id } }) : undefined}
+                testID="jobdetail-expense-empty"
+              />
+            ) : (
+              <>
+                <Card elevation="sm" padding="sm" radius="md">
                   <View style={s.summaryRow}>
-                    <Text style={s.summaryLabel}>Total Expenses</Text>
-                    <Text style={s.summaryValue}>{formatCurrency(totalExpenses)}</Text>
+                    <Text variant="subhead" weight="700" tone="muted">Total Expenses</Text>
+                    <Text variant="subhead" weight="700">{formatCurrency(totalExpenses)}</Text>
                   </View>
-                  {expenseList.map(e => (
-                    <View key={e.id} style={s.rowCard}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={s.rowAmount}>{formatCurrency(e.amount)}</Text>
-                        <Text style={s.rowSub}>{e.category}{e.vendor ? ` · ${e.vendor}` : ''} · {formatDate(e.date)}</Text>
-                      </View>
-                      {canManage && (
-                        <View style={{ flexDirection: 'row', gap: 6 }}>
-                          <Pressable onPress={() => openEditExpense(e)} style={s.editRowBtn}>
-                            <Text style={s.editRowBtnText}>Edit</Text>
-                          </Pressable>
-                          <Pressable onPress={() => handleDeleteExpense(e.id)} style={s.deleteBtn}>
-                            <Text style={s.deleteBtnText}>✕</Text>
-                          </Pressable>
-                        </View>
-                      )}
-                    </View>
-                  ))}
-                </>
-              )
-            }
+                </Card>
+                {expenseList.map(e => (
+                  <SwipeRow
+                    key={e.id}
+                    testID={`job-expense-row-${e.id}`}
+                    enabled={canManage}
+                    renderActions={(drag, methods) => (
+                      <RowSwipeActions
+                        drag={drag}
+                        methods={methods}
+                        onDelete={() => { methods.close(); handleDeleteExpense(e.id); }}
+                        onEdit={() => { methods.close(); openEditExpense(e); }}
+                        testIDDelete={`job-expense-delete-${e.id}`}
+                        testIDEdit={`job-expense-edit-${e.id}`}
+                        deleteLabel="Delete expense"
+                        editLabel="Edit expense"
+                      />
+                    )}
+                  >
+                    <ListRow
+                      title={formatCurrency(e.amount)}
+                      subtitle={`${e.category}${e.vendor ? ' · ' + e.vendor : ''} · ${formatDate(e.date)}`}
+                      trailing="none"
+                    />
+                  </SwipeRow>
+                ))}
+              </>
+            )}
           </>
         )}
 
+        {/* Time tab */}
         {tab === 'time' && (
           <>
             {canManage && (
-              <Pressable style={s.addRowBtn} onPress={() => router.push({ pathname: '/timesheets/manual', params: { jobId: id } })}>
-                <Text style={s.addRowBtnText}>+ Add Time Entry</Text>
-              </Pressable>
+              <Button
+                variant="secondary"
+                size="md"
+                fullWidth
+                label="+ Add Time Entry"
+                onPress={() => router.push({ pathname: '/timesheets/manual', params: { jobId: id } })}
+              />
             )}
-            {timeEntries.length === 0
-              ? <Text style={s.empty}>No time entries recorded.</Text>
-              : (
-                <>
+            {timeEntries.length === 0 ? (
+              <EmptyState
+                icon="clock"
+                message="No time entries."
+                actionLabel={canManage ? 'Add Entry' : undefined}
+                onAction={canManage ? () => router.push({ pathname: '/timesheets/manual', params: { jobId: id } }) : undefined}
+                testID="jobdetail-time-empty"
+              />
+            ) : (
+              <>
+                <Card elevation="sm" padding="sm" radius="md">
                   <View style={s.summaryRow}>
-                    <Text style={s.summaryLabel}>Total Hours</Text>
-                    <Text style={s.summaryValue}>{formatHours(totalTime)}</Text>
+                    <Text variant="subhead" weight="700" tone="muted">Total Hours</Text>
+                    <Text variant="subhead" weight="700">{formatHours(totalTime)}</Text>
                   </View>
-                  {timeEntries.map(e => (
-                    <View key={e.id} style={s.rowCard}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={s.rowAmount}>{e.employeeName}</Text>
-                        <Text style={s.rowSub}>{formatDate(e.date)}{e.note ? ` · ${e.note}` : ''}</Text>
-                      </View>
-                      <Text style={s.rowHours}>{formatHours(e.hours)}</Text>
-                      {canManage && (
-                        <View style={{ flexDirection: 'row', gap: 6 }}>
-                          <Pressable onPress={() => openEditTimeEntry(e)} style={s.editRowBtn}>
-                            <Text style={s.editRowBtnText}>Edit</Text>
-                          </Pressable>
-                          <Pressable onPress={() => handleDeleteTimeEntry(e.id)} style={s.deleteBtn}>
-                            <Text style={s.deleteBtnText}>✕</Text>
-                          </Pressable>
-                        </View>
-                      )}
-                    </View>
-                  ))}
-                </>
-              )
-            }
+                </Card>
+                {timeEntries.map(e => (
+                  <SwipeRow
+                    key={e.id}
+                    testID={`job-time-row-${e.id}`}
+                    enabled={canManage}
+                    renderActions={(drag, methods) => (
+                      <RowSwipeActions
+                        drag={drag}
+                        methods={methods}
+                        onDelete={() => { methods.close(); handleDeleteTimeEntry(e.id); }}
+                        onEdit={() => { methods.close(); openEditTimeEntry(e); }}
+                        testIDDelete={`job-time-delete-${e.id}`}
+                        testIDEdit={`job-time-edit-${e.id}`}
+                        deleteLabel="Delete entry"
+                        editLabel="Edit entry"
+                      />
+                    )}
+                  >
+                    <ListRow
+                      title={e.employeeName}
+                      subtitle={`${formatDate(e.date)}${e.note ? ' · ' + e.note : ''} · ${formatHours(e.hours)}`}
+                      trailing="none"
+                    />
+                  </SwipeRow>
+                ))}
+              </>
+            )}
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
+
+      {/* Edit Time Entry Sheet — sibling at screen root (gorhom anchoring pattern) */}
+      {!!editTimeEntry && (
+        <Sheet
+          testID="jobdetail-edit-time-sheet"
+          snapPoints={['55%']}
+          onClose={() => setEditTimeEntry(null)}
+          header={
+            <SheetHeader
+              title="Edit Entry"
+              onCancel={() => setEditTimeEntry(null)}
+              onSave={() => void confirmEditTimeEntry()}
+              loading={timeEditSaving}
+            />
+          }
+        >
+          {editTimeEntry ? (
+            <Text variant="footnote" tone="muted">
+              {editTimeEntry.employeeName} · {formatDate(editTimeEntry.date)}
+            </Text>
+          ) : null}
+          <Input
+            bottomSheet
+            label="Hours"
+            placeholder="e.g. 8.0"
+            value={timeEditHours}
+            onChangeText={(v) => { setTimeEditHours(v); if (timeEditHoursError) setTimeEditHoursError(undefined); }}
+            keyboardType="decimal-pad"
+            error={timeEditHoursError}
+          />
+          <Input
+            bottomSheet
+            label="Note (optional)"
+            placeholder="Optional note"
+            value={timeEditNote}
+            onChangeText={setTimeEditNote}
+          />
+        </Sheet>
+      )}
+
+      {/* Edit Expense Sheet — sibling at screen root (gorhom anchoring pattern) */}
+      {!!editExpenseEntry && (
+        <Sheet
+          testID="jobdetail-edit-expense-sheet"
+          snapPoints={['72%', '92%']}
+          scrollable
+          onClose={() => setEditExpenseEntry(null)}
+          header={
+            <SheetHeader
+              title="Edit Expense"
+              onCancel={() => setEditExpenseEntry(null)}
+              onSave={() => void confirmEditExpense()}
+              loading={expSaving}
+            />
+          }
+        >
+          <Input
+            bottomSheet
+            label="Category"
+            placeholder="Category"
+            value={expCategory}
+            onChangeText={(v) => { setExpCategory(v); if (expCategoryError) setExpCategoryError(undefined); }}
+            error={expCategoryError}
+          />
+          <Input
+            bottomSheet
+            label="Vendor"
+            placeholder="Vendor"
+            value={expVendor}
+            onChangeText={(v) => { setExpVendor(v); if (expVendorError) setExpVendorError(undefined); }}
+            error={expVendorError}
+          />
+          <Input
+            bottomSheet
+            label="Amount"
+            placeholder="0.00"
+            value={expAmount}
+            onChangeText={(v) => { setExpAmount(v); if (expAmountError) setExpAmountError(undefined); }}
+            keyboardType="decimal-pad"
+            error={expAmountError}
+          />
+          <DateField
+            label="Date"
+            value={expDateValue}
+            onChange={(d) => {
+              setExpDate(formatDateInputValue(d));
+              if (expDateError) setExpDateError(undefined);
+            }}
+            error={expDateError}
+            maximumDate={new Date()}
+            testID="jobdetail-edit-expense-date-picker"
+          />
+        </Sheet>
+      )}
+
+      {/* Add Income Sheet — sibling at screen root (gorhom anchoring pattern) */}
+      {addingIncome && (
+        <Sheet
+          testID="jobdetail-add-income-sheet"
+          snapPoints={['72%', '92%']}
+          scrollable
+          onClose={() => setAddingIncome(false)}
+          header={
+            <SheetHeader
+              title="Add Income"
+              onCancel={() => setAddingIncome(false)}
+              onSave={() => void handleAddIncome()}
+              loading={incomeSaving}
+            />
+          }
+        >
+          <Input
+            bottomSheet
+            label="Amount"
+            placeholder="0.00"
+            value={incomeAmount}
+            onChangeText={(v) => { setIncomeAmount(v); if (incomeAmountError) setIncomeAmountError(undefined); }}
+            keyboardType="decimal-pad"
+            error={incomeAmountError}
+          />
+          <DateField
+            label="Date"
+            value={incomeDateValue}
+            onChange={(d) => {
+              setIncomeDate(formatDateInputValue(d));
+              if (incomeDateError) setIncomeDateError(undefined);
+            }}
+            error={incomeDateError}
+            maximumDate={new Date()}
+            testID="jobdetail-add-income-date-picker"
+          />
+          <Input
+            bottomSheet
+            label="Description"
+            placeholder="Description"
+            value={incomeDesc}
+            onChangeText={(v) => { setIncomeDesc(v); if (incomeDescError) setIncomeDescError(undefined); }}
+            error={incomeDescError}
+          />
+        </Sheet>
+      )}
+    </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  heroCard: { backgroundColor: Colors.navy, padding: Spacing.md, gap: 4 },
-  heroTitle: { fontSize: 20, fontWeight: '900', color: '#fff' },
-  heroSub: { fontSize: 13, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
-  heroBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99, backgroundColor: 'rgba(255,255,255,0.15)' },
-  heroBadgeText: { color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: '700' },
-  editBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: Radius.sm, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
-  editBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  statusRow: { flexDirection: 'row', gap: 8, paddingHorizontal: Spacing.md, paddingVertical: 10, backgroundColor: Colors.bg, borderBottomWidth: 1, borderBottomColor: Colors.border, alignItems: 'center' },
-  statusPill: { paddingVertical: 5, paddingHorizontal: 14, borderRadius: 99, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card },
-  statusPillActive: { backgroundColor: Colors.navy, borderColor: Colors.navy },
-  statusPillText: { fontSize: 12, fontWeight: '700', color: Colors.muted },
-  statusPillTextActive: { color: '#fff' },
-  tabBar: { flexDirection: 'row', backgroundColor: Colors.card, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  tabBtn: { flex: 1, paddingVertical: 12, alignItems: 'center' },
-  tabBtnActive: { borderBottomWidth: 2, borderBottomColor: Colors.navy },
-  tabText: { fontSize: 12, fontWeight: '600', color: Colors.muted },
-  tabTextActive: { color: Colors.navy, fontWeight: '800' },
-  scroll: { padding: Spacing.md, gap: Spacing.md },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  statCard: { flex: 1, minWidth: '45%', backgroundColor: Colors.card, borderRadius: Radius.md, padding: 12, borderTopWidth: 3, borderTopColor: Colors.border, borderWidth: 1, borderColor: Colors.border },
-  statLabel: { fontSize: 10, fontWeight: '700', color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.4 },
-  statValue: { fontSize: 18, fontWeight: '900', color: Colors.text, marginTop: 4 },
-  card: { backgroundColor: Colors.card, borderRadius: Radius.md, padding: 14, borderWidth: 1, borderColor: Colors.border, gap: 10 },
-  cardTitle: { fontSize: 14, fontWeight: '800', color: Colors.text },
-  cardBody: { fontSize: 14, color: Colors.muted, lineHeight: 20 },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: Colors.card, borderRadius: Radius.md, padding: 12, borderWidth: 1, borderColor: Colors.border },
-  summaryLabel: { fontSize: 13, fontWeight: '700', color: Colors.muted },
-  summaryValue: { fontSize: 15, fontWeight: '900', color: Colors.text },
-  addRowBtn: { backgroundColor: Colors.infoBg, borderRadius: Radius.md, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: Colors.infoBorder },
-  addRowBtnText: { color: Colors.infoText, fontWeight: '700', fontSize: 13 },
-  input: { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: 10, fontSize: 14, color: Colors.text, backgroundColor: Colors.bg },
-  saveBtn: { backgroundColor: Colors.navy, borderRadius: Radius.md, padding: 10, alignItems: 'center' },
-  saveBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  cancelBtn: { backgroundColor: Colors.bg, borderRadius: Radius.md, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
-  cancelBtnText: { color: Colors.muted, fontWeight: '700', fontSize: 14 },
-  rowCard: { backgroundColor: Colors.card, borderRadius: Radius.md, padding: 12, borderWidth: 1, borderColor: Colors.border, flexDirection: 'row', alignItems: 'center' },
-  rowAmount: { fontSize: 15, fontWeight: '800', color: Colors.text },
-  rowSub: { fontSize: 12, color: Colors.muted, marginTop: 2 },
-  rowHours: { fontSize: 14, fontWeight: '700', color: Colors.navy },
-  editRowBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.bg },
-  editRowBtnText: { fontSize: 11, fontWeight: '700', color: Colors.muted },
-  deleteBtn: { padding: 8 },
-  deleteBtnText: { color: Colors.danger, fontWeight: '700', fontSize: 16 },
-  empty: { textAlign: 'center', color: Colors.muted, marginTop: 8 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: Spacing.md },
-  modalCard: { backgroundColor: Colors.card, borderRadius: Radius.lg, padding: 20, gap: 12 },
-  modalTitle: { fontSize: 18, fontWeight: '900', color: Colors.text },
-  modalInput: { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: 10, fontSize: 14, color: Colors.text, backgroundColor: Colors.bg },
-  modalBtn: { borderRadius: Radius.md, padding: 12, alignItems: 'center' },
-  modalBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  statCardWrapper: { flex: 1, minWidth: '45%' },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  emptyState: { alignItems: 'center', paddingVertical: 32, gap: 8 },
+  swipeBtn: { width: SWIPE_BUTTON_WIDTH, alignItems: 'center', justifyContent: 'center' },
 });
+
+// Per-route crash boundary — scopes a render error to this screen (Expo Router).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/ui/AppErrorBoundary';

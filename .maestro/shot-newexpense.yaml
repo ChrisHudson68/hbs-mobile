@@ -1,0 +1,21 @@
+# Clean standalone capture of the New Expense formSheet (manager). Isolated flow
+# (no employees detour) so the More → Add Expense quick action fires reliably.
+appId: com.hudsonbusinesssolutions.mobile
+---
+- runFlow: login.yaml
+- tapOn:
+    point: "90%,95%"
+- extendedWaitUntil:
+    visible:
+      id: "more-profile-card"
+    timeout: 12000
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%,51%"
+- extendedWaitUntil:
+    visible:
+      id: "newexpense-amount-input"
+    timeout: 12000
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: ${SHOTDIR}/${PREFIX}-17-newexpense

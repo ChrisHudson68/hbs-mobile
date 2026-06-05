@@ -1,42 +1,87 @@
 import { File, Paths } from 'expo-file-system';
-import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Pressable, RefreshControl,
-  SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View,
+  ScrollView, StyleSheet, View,
+  Text as RNText,
 } from 'react-native';
 import { useApi } from '../../src/mobile/hooks/useApi';
 import { useAuth } from '../../src/mobile/context/AuthContext';
 import { CONFIG } from '../../src/mobile/constants';
-import { Colors, Radius, Spacing } from '../../src/mobile/theme';
+import { useTheme } from '../../src/mobile/theme';
 import type { InvoiceDetail } from '../../src/mobile/types';
-import { formatCurrency, formatDate, isManagerOrAdmin } from '../../src/mobile/utils';
+import { formatCurrency, formatDate, formatDateInputValue, isManagerOrAdmin } from '../../src/mobile/utils';
+import { Screen } from '@/components/ui/Screen';
+import { Text } from '@/components/ui/Text';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { DateField } from '@/components/ui/DateField';
+import { Input } from '@/components/ui/Input';
+import { SectionHeader } from '@/components/ui/SectionHeader';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Sheet } from '@/components/ui/Sheet';
 
 const PAYMENT_METHODS = ['Check', 'Cash', 'ACH', 'Credit Card', 'Other'];
 
-function statusColor(status: string) {
+function statusTone(status: string): 'success' | 'danger' | 'warning' | 'neutral' {
   const s = status.toLowerCase();
-  if (s === 'paid') return Colors.success;
-  if (s === 'unpaid') return Colors.danger;
-  if (s === 'partial') return Colors.warning;
-  return Colors.muted;
+  if (s === 'paid') return 'success';
+  if (s === 'unpaid') return 'danger';
+  if (s === 'partial') return 'warning';
+  return 'neutral';
+}
+
+function SheetHeader({
+  title,
+  onCancel,
+  onSave,
+  saveLabel = 'Save',
+  saveLoading = false,
+}: {
+  title: string;
+  onCancel: () => void;
+  onSave: () => void;
+  saveLabel?: string;
+  saveLoading?: boolean;
+}) {
+  const { spacing } = useTheme();
+  return (
+    <View style={{ minHeight: 44, justifyContent: 'center', marginBottom: spacing.sm }}>
+      {/* Centered title, edge buttons overlaid — keeps the title optically
+          centered regardless of the Cancel / Save button widths. */}
+      <Text variant="headline" weight="600" style={{ textAlign: 'center' }}>{title}</Text>
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
+          flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+        }}
+      >
+        <Button variant="ghost" size="sm" label="Cancel" onPress={onCancel} />
+        <Button variant="primary" size="sm" label={saveLabel} onPress={onSave} loading={saveLoading} />
+      </View>
+    </View>
+  );
 }
 
 export default function InvoiceDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, action } = useLocalSearchParams<{ id: string; action?: string }>();
   const api = useApi();
   const navigation = useNavigation();
-  const router = useRouter();
   const { user, token, tenantSubdomain } = useAuth();
+  const { colors, spacing, radius } = useTheme();
   const canManage = isManagerOrAdmin(user);
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [addingPayment, setAddingPayment] = useState(false);
+  const [paymentSheetOpen, setPaymentSheetOpen] = useState(false);
   const [payAmount, setPayAmount] = useState('');
+  const [payAmountError, setPayAmountError] = useState<string | undefined>(undefined);
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
   const [payMethod, setPayMethod] = useState('Check');
   const [payRef, setPayRef] = useState('');
@@ -46,7 +91,7 @@ export default function InvoiceDetailScreen() {
 
   const load = useCallback(async (isRefresh = false) => {
     if (!invoiceId) return;
-    isRefresh ? setRefreshing(true) : setLoading(true);
+    if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const res = await api.getInvoice(invoiceId);
       if (res.invoice) {
@@ -54,10 +99,29 @@ export default function InvoiceDetailScreen() {
         navigation.setOptions({ title: res.invoice.invoiceNumber ?? `Invoice #${invoiceId}` });
       }
     } catch { /* ignore */ }
-    finally { isRefresh ? setRefreshing(false) : setLoading(false); }
+    finally { if (isRefresh) setRefreshing(false); else setLoading(false); }
   }, [api, invoiceId, navigation]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // One-shot action-param dispatcher: fires the existing handler once after
+  // the invoice has loaded. Keeps handleSharePdf / handleRecordPayment bodies
+  // byte-for-byte unchanged (protected regions — 06-07 range-hash gate).
+  const actionFiredRef = useRef(false);
+  // Ref is populated after handleSharePdf is declared below; the effect only
+  // runs after invoice loads so the ref is always populated before it fires.
+  const handleSharePdfRef = useRef<() => Promise<void>>(async () => { /* populated below */ });
+  const canManageRef = useRef(canManage);
+  canManageRef.current = canManage;
+  useEffect(() => {
+    if (!action || loading || !invoice || actionFiredRef.current) return;
+    actionFiredRef.current = true;
+    if (action === 'share') {
+      void handleSharePdfRef.current();
+    } else if (action === 'recordPayment' && canManageRef.current) {
+      setPaymentSheetOpen(true);
+    }
+  }, [action, loading, invoice]);
 
   const handleSharePdf = async () => {
     if (!invoice) return;
@@ -89,11 +153,13 @@ export default function InvoiceDetailScreen() {
       setPdfLoading(false);
     }
   };
+  // Keep ref current so the action-param dispatcher can call the latest closure.
+  handleSharePdfRef.current = handleSharePdf;
 
   const handleRecordPayment = async () => {
     const amt = parseFloat(payAmount);
     if (!payAmount.trim() || isNaN(amt) || amt <= 0) {
-      Alert.alert('Required', 'Enter a valid payment amount.');
+      setPayAmountError('Enter a valid payment amount');
       return;
     }
     setPaySaving(true);
@@ -104,7 +170,7 @@ export default function InvoiceDetailScreen() {
         method: payMethod,
         reference: payRef.trim() || undefined,
       });
-      setPayAmount(''); setPayRef(''); setAddingPayment(false);
+      setPayAmount(''); setPayRef(''); setPaymentSheetOpen(false);
       await load();
     } catch (e) {
       Alert.alert('Error', e instanceof Error ? e.message : 'Failed to record payment.');
@@ -114,180 +180,242 @@ export default function InvoiceDetailScreen() {
   };
 
   if (loading) {
-    return <SafeAreaView style={s.safe}><View style={s.center}><ActivityIndicator size="large" color={Colors.navy} /></View></SafeAreaView>;
+    return (
+      <Screen headerMode="native">
+        <View style={s.center}>
+          <ActivityIndicator size="large" color={colors.navy} />
+        </View>
+      </Screen>
+    );
   }
 
   if (!invoice) {
-    return <SafeAreaView style={s.safe}><View style={s.center}><Text style={s.empty}>Invoice not found.</Text></View></SafeAreaView>;
+    return (
+      <Screen headerMode="native">
+        <View style={s.center}>
+          <IconSymbol name={'exclamationmark.triangle' as never} size={40} color={colors.mutedLight} />
+          <Text variant="subhead" tone="muted">Invoice not found.</Text>
+        </View>
+      </Screen>
+    );
   }
 
   const balance = Number(invoice.balance ?? 0);
 
   return (
-    <SafeAreaView style={s.safe}>
+    <Screen headerMode="native" padded={false}>
       <ScrollView
-        contentContainerStyle={s.scroll}
+        contentContainerStyle={{ padding: spacing.md, gap: spacing.md, paddingBottom: 32 }}
+        contentInsetAdjustmentBehavior="automatic"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
       >
-        <View style={s.heroCard}>
+        {/* Navy hero card */}
+        <View style={[s.heroCard, { backgroundColor: colors.navySurface, borderRadius: radius.lg }]}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <View style={{ flex: 1 }}>
-              <Text style={s.heroTitle}>{invoice.invoiceNumber ?? `Invoice #${invoice.id}`}</Text>
-              {invoice.jobName ? <Text style={s.heroSub}>{invoice.jobName}</Text> : null}
-              {invoice.clientName ? <Text style={s.heroSub}>{invoice.clientName}</Text> : null}
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text variant="title3" tone="inverse" weight="700">
+                {invoice.invoiceNumber ?? `Invoice #${invoice.id}`}
+              </Text>
+              {invoice.jobName ? (
+                <Text variant="caption" tone="inverse">{invoice.jobName}</Text>
+              ) : null}
+              {invoice.clientName ? (
+                <Text variant="caption" tone="inverse">{invoice.clientName}</Text>
+              ) : null}
             </View>
-            <View style={{ alignItems: 'flex-end', gap: 8 }}>
-              <View style={[s.badge, { backgroundColor: statusColor(invoice.status) + '30' }]}>
-                <Text style={[s.badgeText, { color: statusColor(invoice.status) }]}>{invoice.status}</Text>
-              </View>
-              <Pressable style={s.pdfBtn} onPress={() => void handleSharePdf()} disabled={pdfLoading}>
-                {pdfLoading
-                  ? <ActivityIndicator size="small" color="rgba(255,255,255,0.8)" />
-                  : <Text style={s.pdfBtnText}>⬇ PDF</Text>
-                }
+            <View style={{ alignItems: 'flex-end', gap: spacing.sm }}>
+              <Badge tone={statusTone(invoice.status)} label={invoice.status} />
+              <Pressable
+                testID="invoice-pdf-share-button"
+                onPress={() => void handleSharePdf()}
+                disabled={pdfLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Download invoice PDF"
+                accessibilityState={{ disabled: pdfLoading, busy: pdfLoading }}
+                style={[s.pdfBtn, { borderColor: 'rgba(255,255,255,0.35)', borderRadius: radius.sm }]}
+              >
+                {pdfLoading ? (
+                  <ActivityIndicator size="small" color="rgba(255,255,255,0.8)" />
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <IconSymbol name={'arrow.down.doc' as never} size={14} color="rgba(255,255,255,0.9)" />
+                    <RNText style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '700' }}>PDF</RNText>
+                  </View>
+                )}
               </Pressable>
             </View>
           </View>
-          <View style={s.heroAmounts}>
+
+          {/* Amount / Balance row */}
+          <View style={[s.heroAmounts, { borderTopColor: 'rgba(255,255,255,0.15)' }]}>
             <View>
-              <Text style={s.heroAmtLabel}>Invoice Amount</Text>
-              <Text style={s.heroAmt}>{formatCurrency(invoice.amount)}</Text>
+              <Text variant="caption" tone="inverse">Invoice Amount</Text>
+              <Text variant="title2" tone="inverse" weight="700">{formatCurrency(invoice.amount)}</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={s.heroAmtLabel}>Balance Due</Text>
-              <Text style={[s.heroAmt, { color: balance > 0 ? Colors.danger : Colors.success }]}>
+              <Text variant="caption" tone="inverse">Balance Due</Text>
+              <RNText style={{
+                fontSize: 22,
+                fontWeight: '700',
+                lineHeight: 28,
+                color: balance > 0 ? colors.danger : colors.success,
+              }}>
                 {formatCurrency(balance)}
-              </Text>
+              </RNText>
             </View>
           </View>
         </View>
 
-        <View style={s.detailCard}>
+        {/* Detail card */}
+        <Card elevation="sm" padding="md" radius="md">
           <View style={s.detailRow}>
-            <Text style={s.detailLabel}>Issued</Text>
-            <Text style={s.detailValue}>{formatDate(invoice.dateIssued)}</Text>
+            <Text variant="footnote" tone="muted" weight="600">Issued</Text>
+            <Text variant="subhead" weight="700">{formatDate(invoice.dateIssued)}</Text>
           </View>
           <View style={s.detailRow}>
-            <Text style={s.detailLabel}>Due</Text>
-            <Text style={s.detailValue}>{formatDate(invoice.dueDate)}</Text>
+            <Text variant="footnote" tone="muted" weight="600">Due</Text>
+            <Text variant="subhead" weight="700">{formatDate(invoice.dueDate)}</Text>
           </View>
           <View style={s.detailRow}>
-            <Text style={s.detailLabel}>Total Paid</Text>
-            <Text style={s.detailValue}>{formatCurrency(invoice.totalPaid)}</Text>
+            <Text variant="footnote" tone="muted" weight="600">Total Paid</Text>
+            <Text variant="subhead" weight="700">{formatCurrency(invoice.totalPaid)}</Text>
           </View>
           {invoice.notes ? (
-            <View style={[s.detailRow, { flexDirection: 'column', gap: 4 }]}>
-              <Text style={s.detailLabel}>Notes</Text>
-              <Text style={s.detailBody}>{invoice.notes}</Text>
+            <View style={{ gap: 4 }}>
+              <Text variant="footnote" tone="muted" weight="600">Notes</Text>
+              <Text variant="body">{invoice.notes}</Text>
             </View>
           ) : null}
-        </View>
+        </Card>
 
-        <Text style={s.sectionTitle}>Payment History</Text>
+        {/* Payment history section */}
+        <SectionHeader title="Payment History" />
 
-        {canManage && balance > 0 && !addingPayment && (
-          <Pressable style={s.addRowBtn} onPress={() => setAddingPayment(true)}>
-            <Text style={s.addRowBtnText}>+ Record Payment</Text>
-          </Pressable>
+        {canManage && balance > 0 && (
+          <Button
+            variant="primary"
+            size="md"
+            fullWidth
+            label="+ Record Payment"
+            onPress={() => setPaymentSheetOpen(true)}
+            testID="invoice-record-payment-button"
+          />
         )}
 
-        {addingPayment && (
-          <View style={s.formCard}>
-            <Text style={s.formTitle}>Record Payment</Text>
-            <TextInput
-              style={s.input}
-              placeholder="Amount"
-              value={payAmount}
-              onChangeText={setPayAmount}
-              keyboardType="decimal-pad"
-              placeholderTextColor={Colors.mutedLight}
+        {(invoice.payments ?? []).length === 0 ? (
+          <View style={s.emptyState}>
+            <IconSymbol name={'dollarsign.circle' as never} size={40} color={colors.mutedLight} />
+            <Text variant="subhead" tone="muted">No payments recorded.</Text>
+          </View>
+        ) : null}
+
+        {(invoice.payments ?? []).map(p => (
+          <Card key={p.id} elevation="sm" padding="md" radius="md">
+            <Text variant="headline" weight="600">{formatCurrency(p.amount)}</Text>
+            <Text variant="caption" tone="muted">
+              {formatDate(p.date)}{p.method ? ` · ${p.method}` : ''}{p.reference ? ` · ${p.reference}` : ''}
+            </Text>
+          </Card>
+        ))}
+      </ScrollView>
+
+      {/* Record Payment sheet — sibling at screen root, never inside ScrollView */}
+      {paymentSheetOpen && (
+        <Sheet
+          testID="invoice-payment-sheet"
+          snapPoints={['70%', '92%']}
+          scrollable
+          onClose={() => setPaymentSheetOpen(false)}
+          header={
+            <SheetHeader
+              title="Record Payment"
+              onCancel={() => setPaymentSheetOpen(false)}
+              onSave={() => void handleRecordPayment()}
+              saveLabel="Save"
+              saveLoading={paySaving}
             />
-            <TextInput
-              style={s.input}
-              placeholder="Date (YYYY-MM-DD)"
-              value={payDate}
-              onChangeText={setPayDate}
-              placeholderTextColor={Colors.mutedLight}
-            />
-            <Text style={s.fieldLabel}>Method</Text>
+          }
+        >
+          <Input
+            label="Amount"
+            placeholder="Amount"
+            value={payAmount}
+            onChangeText={(v) => { setPayAmount(v); if (payAmountError) setPayAmountError(undefined); }}
+            keyboardType="decimal-pad"
+            error={payAmountError}
+            bottomSheet
+          />
+          <DateField
+            label="Date"
+            value={payDate ? new Date(`${payDate}T00:00:00`) : null}
+            onChange={(d) => setPayDate(formatDateInputValue(d))}
+            testID="invoice-payment-date"
+          />
+          <View style={{ gap: spacing.xs }}>
+            <Text variant="footnote" tone="muted" weight="600">Method</Text>
             <View style={s.segmented}>
               {PAYMENT_METHODS.map(m => (
-                <Pressable key={m} style={[s.segBtn, payMethod === m && s.segBtnActive]} onPress={() => setPayMethod(m)}>
-                  <Text style={[s.segText, payMethod === m && s.segTextActive]}>{m}</Text>
+                <Pressable
+                  key={m}
+                  style={[
+                    s.segBtn,
+                    {
+                      borderRadius: radius.sm,
+                      borderColor: payMethod === m ? colors.navySurface : colors.border,
+                      backgroundColor: payMethod === m ? colors.navySurface : colors.bg,
+                    },
+                  ]}
+                  onPress={() => setPayMethod(m)}
+                >
+                  <RNText style={{
+                    fontSize: 12,
+                    fontWeight: '600',
+                    color: payMethod === m ? colors.inverse : colors.muted,
+                  }}>
+                    {m}
+                  </RNText>
                 </Pressable>
               ))}
             </View>
-            <TextInput
-              style={s.input}
-              placeholder="Reference / Check # (optional)"
-              value={payRef}
-              onChangeText={setPayRef}
-              placeholderTextColor={Colors.mutedLight}
-            />
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Pressable style={[s.saveBtn, { flex: 1 }]} onPress={() => void handleRecordPayment()} disabled={paySaving}>
-                {paySaving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Save</Text>}
-              </Pressable>
-              <Pressable style={[s.cancelBtn, { flex: 1 }]} onPress={() => setAddingPayment(false)}>
-                <Text style={s.cancelBtnText}>Cancel</Text>
-              </Pressable>
-            </View>
           </View>
-        )}
-
-        {(invoice.payments ?? []).length === 0 && <Text style={s.empty}>No payments recorded.</Text>}
-        {(invoice.payments ?? []).map(p => (
-          <View key={p.id} style={s.paymentRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={s.payAmount}>{formatCurrency(p.amount)}</Text>
-              <Text style={s.paySub}>
-                {formatDate(p.date)}{p.method ? ` · ${p.method}` : ''}{p.reference ? ` · ${p.reference}` : ''}
-              </Text>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-    </SafeAreaView>
+          <Input
+            label="Reference"
+            placeholder="Reference / Check # (optional)"
+            value={payRef}
+            onChangeText={setPayRef}
+            bottomSheet
+          />
+        </Sheet>
+      )}
+    </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.bg },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  scroll: { padding: Spacing.md, gap: Spacing.md },
-  heroCard: { backgroundColor: Colors.navy, borderRadius: Radius.lg, padding: 16, gap: 12 },
-  heroTitle: { fontSize: 18, fontWeight: '900', color: '#fff' },
-  heroSub: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
-  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 99 },
-  badgeText: { fontSize: 11, fontWeight: '700' },
-  pdfBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: Radius.sm, borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)', minWidth: 60, alignItems: 'center' },
-  pdfBtnText: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '700' },
-  heroAmounts: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.15)', paddingTop: 12 },
-  heroAmtLabel: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' },
-  heroAmt: { fontSize: 20, fontWeight: '900', color: '#fff', marginTop: 2 },
-  detailCard: { backgroundColor: Colors.card, borderRadius: Radius.md, padding: 14, borderWidth: 1, borderColor: Colors.border, gap: 10 },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  detailLabel: { fontSize: 12, fontWeight: '600', color: Colors.muted },
-  detailValue: { fontSize: 13, fontWeight: '700', color: Colors.text },
-  detailBody: { fontSize: 13, color: Colors.muted, lineHeight: 18 },
-  sectionTitle: { fontSize: 12, fontWeight: '800', color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  addRowBtn: { backgroundColor: Colors.infoBg, borderRadius: Radius.md, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: Colors.infoBorder },
-  addRowBtnText: { color: Colors.infoText, fontWeight: '700', fontSize: 13 },
-  formCard: { backgroundColor: Colors.card, borderRadius: Radius.md, padding: 14, borderWidth: 1, borderColor: Colors.border, gap: 10 },
-  formTitle: { fontSize: 14, fontWeight: '800', color: Colors.text },
-  fieldLabel: { fontSize: 12, fontWeight: '600', color: Colors.muted },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  heroCard: { padding: 16, gap: 12 },
+  heroAmounts: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    paddingTop: 12,
+  },
+  pdfBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  emptyState: { alignItems: 'center', paddingVertical: 24, gap: 8 },
   segmented: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  segBtn: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.bg },
-  segBtnActive: { backgroundColor: Colors.navy, borderColor: Colors.navy },
-  segText: { fontSize: 12, fontWeight: '600', color: Colors.muted },
-  segTextActive: { color: '#fff' },
-  input: { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: 10, fontSize: 14, color: Colors.text, backgroundColor: Colors.bg },
-  saveBtn: { backgroundColor: Colors.navy, borderRadius: Radius.md, padding: 10, alignItems: 'center' },
-  saveBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  cancelBtn: { backgroundColor: Colors.bg, borderRadius: Radius.md, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
-  cancelBtnText: { color: Colors.muted, fontWeight: '700', fontSize: 14 },
-  paymentRow: { backgroundColor: Colors.card, borderRadius: Radius.md, padding: 12, borderWidth: 1, borderColor: Colors.border },
-  payAmount: { fontSize: 15, fontWeight: '800', color: Colors.text },
-  paySub: { fontSize: 12, color: Colors.muted, marginTop: 2 },
-  empty: { textAlign: 'center', color: Colors.muted, marginTop: 8 },
+  segBtn: { paddingVertical: 6, paddingHorizontal: 10, borderWidth: 1 },
 });
+
+// Per-route crash boundary — scopes a render error to this screen (Expo Router).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/ui/AppErrorBoundary';

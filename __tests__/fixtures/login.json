@@ -1,0 +1,46 @@
+{
+  "ok": true,
+  "token": "hbsm_FIXTURE_TOKEN_REDACTED_0000000000000000",
+  "expiresAt": "2026-06-15T02:10:39.363Z",
+  "user": {
+    "id": 48,
+    "name": "DJ Manager",
+    "email": "manager@hbs.com",
+    "role": "Manager",
+    "permissions": [
+      "inventory.view",
+      "inventory.manage",
+      "inventory.categories",
+      "inventory.archive",
+      "jobs.view",
+      "jobs.create",
+      "jobs.edit",
+      "employees.view",
+      "employees.create",
+      "employees.edit",
+      "time.view",
+      "time.clock",
+      "time.edit_requests",
+      "time.approve",
+      "invoices.view",
+      "invoices.create",
+      "invoices.edit",
+      "payments.manage",
+      "fleet.view",
+      "fleet.manage",
+      "financials.view",
+      "financials.edit",
+      "reports.view",
+      "activity.view",
+      "settings.view",
+      "users.view",
+      "billing.view"
+    ]
+  },
+  "tenant": {
+    "id": 5,
+    "name": "acme",
+    "subdomain": "acme",
+    "logoPath": null
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "ok": true,
+  "job": {
+    "id": 2,
+    "jobName": "test",
+    "jobCode": null,
+    "jobDescription": "test job description123",
+    "clientName": "test",
+    "startDate": "2026-03-17",
+    "status": "Active",
+    "isOverhead": false,
+    "sourceEstimateId": null,
+    "sourceEstimateNumber": null,
+    "sourceEstimateCustomerName": null,
+    "soldBy": null,
+    "commissionPercent": 0,
+    "contractAmount": 1234,
+    "retainagePercent": 0,
+    "financials": {
+      "totalIncome": 0,
+      "totalExpenses": 0,
+      "totalLabor": 0,
+      "totalHours": 0,
+      "totalCosts": 0,
+      "totalInvoiced": 1234,
+      "totalCollected": 1234,
+      "unpaidInvoices": 0,
+      "unpaidInvoiceBalance": 0,
+      "remainingContract": 1234,
+      "profit": 0
+    }
+  }
+}
