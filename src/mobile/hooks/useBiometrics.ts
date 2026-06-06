@@ -9,7 +9,6 @@ export type BiometricState = {
   biometricType: string | null;
   enable: () => Promise<boolean>;
   disable: () => Promise<void>;
-  authenticate: () => Promise<boolean>;
 };
 
 function describeBiometricType(types: LocalAuthentication.AuthenticationType[]): string | null {
@@ -54,15 +53,5 @@ export function useBiometrics(): BiometricState {
     setEnabled(false);
   }, []);
 
-  const authenticate = useCallback(async (): Promise<boolean> => {
-    if (!available || !enabled) return false;
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Sign in to Hudson Business Solutions',
-      cancelLabel: 'Use Password',
-      fallbackLabel: 'Use Password',
-    });
-    return result.success;
-  }, [available, enabled]);
-
-  return { available, enabled, biometricType, enable, disable, authenticate };
+  return { available, enabled, biometricType, enable, disable };
 }
