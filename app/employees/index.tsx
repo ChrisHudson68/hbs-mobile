@@ -41,14 +41,15 @@ export default function EmployeesScreen() {
   const [search, setSearch] = useState('');
 
   const load = useCallback(async (isRefresh = false) => {
-    isRefresh ? setRefreshing(true) : setLoading(true);
+    if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const res = await api.getEmployees();
       setEmployees(res.employees ?? []);
     } catch { /* ignore */ }
-    finally { isRefresh ? setRefreshing(false) : setLoading(false); }
+    finally { if (isRefresh) setRefreshing(false); else setLoading(false); }
   }, [api]);
 
+  // eslint-disable-next-line react-compiler-rules/set-state-in-effect -- fetch-on-mount
   useEffect(() => { void load(); }, [load]);
 
   // Client-side filter before splitting active/inactive — no API call

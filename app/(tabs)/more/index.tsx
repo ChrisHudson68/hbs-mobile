@@ -126,6 +126,7 @@ export default function MoreScreen() {
   const activeEntry = timesheetData?.activeClockEntry;
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
+    // eslint-disable-next-line react-compiler-rules/set-state-in-effect -- timer seeds then ticks elapsed seconds
     if (!activeEntry?.clockInAt) { setElapsed(0); return; }
     const update = () => setElapsed(
       Math.max(0, Math.floor((Date.now() - new Date(activeEntry.clockInAt!).getTime()) / 1000)),

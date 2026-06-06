@@ -102,6 +102,7 @@ export default function InvoiceDetailScreen() {
     finally { if (isRefresh) setRefreshing(false); else setLoading(false); }
   }, [api, invoiceId, navigation]);
 
+  // eslint-disable-next-line react-compiler-rules/set-state-in-effect -- fetch-on-mount
   useEffect(() => { void load(); }, [load]);
 
   // One-shot action-param dispatcher: fires the existing handler once after
@@ -112,6 +113,7 @@ export default function InvoiceDetailScreen() {
   // runs after invoice loads so the ref is always populated before it fires.
   const handleSharePdfRef = useRef<() => Promise<void>>(async () => { /* populated below */ });
   const canManageRef = useRef(canManage);
+  // eslint-disable-next-line react-compiler-rules/refs -- latest-value ref for the one-shot action dispatcher above
   canManageRef.current = canManage;
   useEffect(() => {
     if (!action || loading || !invoice || actionFiredRef.current) return;
@@ -154,6 +156,7 @@ export default function InvoiceDetailScreen() {
     }
   };
   // Keep ref current so the action-param dispatcher can call the latest closure.
+  // eslint-disable-next-line react-compiler-rules/refs -- mirrors latest closure for the one-shot action dispatcher
   handleSharePdfRef.current = handleSharePdf;
 
   const handleRecordPayment = async () => {

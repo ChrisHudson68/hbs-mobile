@@ -128,12 +128,12 @@ export function buildTimesheetMetrics(
   const todayKey = now.toDateString();
   const weekStart = getWeekStart(now).getTime();
 
-  const mergedEntries: Array<{
+  const mergedEntries: {
     id: number;
     date?: string;
     clockInAt: string | null;
     clockOutAt: string | null;
-  }> = [...entries];
+  }[] = [...entries];
 
   if (activeClockEntry?.id && !mergedEntries.some((entry) => entry.id === activeClockEntry.id)) {
     mergedEntries.push({

@@ -132,7 +132,7 @@ function summarizeBody(body: RequestInit['body']) {
   }
 
   if (body instanceof FormData) {
-    const entries: Array<{ key: string; value: string }> = [];
+    const entries: { key: string; value: string }[] = [];
 
     try {
       for (const [key, value] of body.entries()) {

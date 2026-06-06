@@ -222,6 +222,7 @@ export default function JobDetailScreen() {
     finally { if (isRefresh) setRefreshing(false); else setLoading(false); }
   }, [api, jobId, canManage, navigation]);
 
+  // eslint-disable-next-line react-compiler-rules/set-state-in-effect -- fetch-on-mount
   useEffect(() => { void load(); }, [load]);
 
   const handleStatusChange = async (newStatus: string) => {
