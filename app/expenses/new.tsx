@@ -83,6 +83,7 @@ export default function NewExpenseScreen() {
     finally { setLoadingJobs(false); }
   }, [api]);
 
+  // eslint-disable-next-line react-compiler-rules/set-state-in-effect -- fetch-on-mount
   useEffect(() => { void load(); }, [load]);
 
   // Discard guard (Pattern E / D-10)

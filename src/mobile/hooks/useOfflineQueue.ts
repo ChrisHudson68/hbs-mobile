@@ -74,6 +74,7 @@ type FlushOptions = {
 
 export function useOfflineQueueFlusher(options: FlushOptions) {
   const optionsRef = useRef(options);
+  // eslint-disable-next-line react-compiler-rules/refs -- latest-options ref, read only inside the async flush callback
   optionsRef.current = options;
 
   const flush = useCallback(async () => {

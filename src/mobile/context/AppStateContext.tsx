@@ -56,6 +56,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [isAuthenticated, token, tenantSubdomain, logout]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-compiler-rules/set-state-in-effect -- fetch-on-mount
     void fetchSummary();
   }, [fetchSummary]);
 

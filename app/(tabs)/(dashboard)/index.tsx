@@ -80,6 +80,7 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     const entry = timesheetData?.activeClockEntry;
+    // eslint-disable-next-line react-compiler-rules/set-state-in-effect -- timer seeds then ticks elapsed seconds
     if (!entry?.clockInAt) { setElapsed(0); return; }
     const update = () => setElapsed(Math.max(0, Math.floor((Date.now() - new Date(entry.clockInAt!).getTime()) / 1000)));
     update();

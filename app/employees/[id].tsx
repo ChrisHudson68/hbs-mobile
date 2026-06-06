@@ -91,6 +91,7 @@ export default function EmployeeDetailScreen() {
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-compiler-rules/set-state-in-effect -- fetch-on-mount
     void load();
   }, [load]);
 
